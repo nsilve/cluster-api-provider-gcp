@@ -71,6 +71,11 @@ type Network struct {
 	// +optional
 	APIServerInstanceGroups map[string]string `json:"apiServerInstanceGroups,omitempty"`
 
+	// WorkerInstanceGroups is a map from zone to the full reference
+	// to the instance groups created for the worker nodes created in the same zone.
+	// +optional
+	WorkerInstanceGroups map[string]string `json:"workerInstanceGroups,omitempty"`
+
 	// APIServerBackendService is the full reference to the backend service
 	// created for the API Server.
 	// +optional

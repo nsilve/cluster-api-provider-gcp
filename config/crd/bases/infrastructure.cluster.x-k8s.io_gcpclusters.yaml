@@ -671,6 +671,13 @@ spec:
                     description: SelfLink is the link to the Network used for this
                       cluster.
                     type: string
+                  workerInstanceGroups:
+                    additionalProperties:
+                      type: string
+                    description: WorkerInstanceGroups is a map from zone to the full
+                      reference to the instance groups created for the worker nodes
+                      created in the same zone.
+                    type: object
                 type: object
               ready:
                 description: Bastion Instance `json:"bastion,omitempty"`

@@ -25,26 +25,28 @@ import (
 	"os"
 	"time"
 
-	infrastructurev1beta1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	infrav1alpha3 "sigs.k8s.io/cluster-api-provider-gcp/api/v1alpha3"
 	infrav1alpha4 "sigs.k8s.io/cluster-api-provider-gcp/api/v1alpha4"
 	infrav1beta1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/controllers"
+	infrav1beta1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
+	infrav1controllersexp "sigs.k8s.io/cluster-api-provider-gcp/exp/controllers"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 	"sigs.k8s.io/cluster-api-provider-gcp/version"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	expv1beta1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	//utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
 var (
@@ -60,7 +62,11 @@ func init() {
 	_ = infrav1alpha4.AddToScheme(scheme)
 	_ = infrav1beta1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
-	utilruntime.Must(infrastructurev1beta1.AddToScheme(scheme))
+	_ = infrav1beta1exp.AddToScheme(scheme)
+	_ = expv1beta1exp.AddToScheme(scheme)
+
+	//utilruntime.Must(infrav1beta1exp.AddToScheme(scheme))
+	//_ = infrastructurev1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -75,6 +81,7 @@ var (
 	webhookCertDir              string
 	gcpClusterConcurrency       int
 	gcpMachineConcurrency       int
+	gcpMachinePoolConcurrency   int
 	webhookPort                 int
 	reconcileTimeout            time.Duration
 	syncPeriod                  time.Duration
@@ -158,6 +165,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GCPCluster")
 		os.Exit(1)
 	}
+	if err = (&infrav1controllersexp.GCPMachinePoolReconciler{
+		Client: mgr.GetClient(),
+		//Scheme: mgr.GetScheme(),
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: gcpMachinePoolConcurrency}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GCPMachinePool")
+		os.Exit(1)
+	}
 
 	if err = (&infrav1beta1.GCPCluster{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "GCPCluster")
@@ -176,6 +190,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&infrav1beta1exp.GCPMachinePool{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "GCPMachinePool")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
 		setupLog.Error(err, "unable to create ready check")
 		os.Exit(1)
@@ -186,13 +205,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.GCPMachinePoolReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GCPMachinePool")
-		os.Exit(1)
-	}
 	// +kubebuilder:scaffold:builder
 	setupLog.Info("starting manager", "version", version.Get().String(), "extended_info", version.Get())
 	if err := mgr.Start(ctx); err != nil {
@@ -275,6 +287,12 @@ func initFlags(fs *pflag.FlagSet) {
 		"gcpmachine-concurrency",
 		10,
 		"Number of GCPMachines to process simultaneously",
+	)
+
+	fs.IntVar(&gcpMachinePoolConcurrency,
+		"gcppoolmachine-concurrency",
+		10,
+		"Number of GCPMachinePolls to process simultaneously",
 	)
 
 	fs.DurationVar(&syncPeriod,

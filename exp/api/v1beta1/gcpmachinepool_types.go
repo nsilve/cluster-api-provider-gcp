@@ -37,8 +37,17 @@ type GCPMachinePoolStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=gcpmachinepools,scope=Namespaced,categories=cluster-api,shortName=gcpmp
+// +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Replicas",type="string",JSONPath=".status.replicas",description="GCPMachinePool replicas count"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="GCPMachinePool replicas count"
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.provisioningState",description="GCP Instance Group provisioning state"
+// +kubebuilder:printcolumn:name="Cluster",type="string",priority=1,JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this GCPMachinePool belongs"
+// +kubebuilder:printcolumn:name="MachinePool",type="string",priority=1,JSONPath=".metadata.ownerReferences[?(@.kind==\"MachinePool\")].name",description="MachinePool object to which this GCPMachinePool belongs"
+// +kubebuilder:printcolumn:name="Instance Group ID",type="string",priority=1,JSONPath=".spec.providerID",description="GCP Instance Group ID"
+// +kubebuilder:printcolumn:name="VM Size",type="string",priority=1,JSONPath=".spec.template.vmSize",description="GCP VM Size"
 
 // GCPMachinePool is the Schema for the gcpmachinepools API
 type GCPMachinePool struct {

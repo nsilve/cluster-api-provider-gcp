@@ -75,6 +75,7 @@ type MachineGetter interface {
 	Role() string
 	IsControlPlane() bool
 	ControlPlaneGroupName() string
+	WorkerGroupName(zone string) string
 	GetInstanceID() *string
 	GetProviderID() string
 	GetBootstrapData() (string, error)

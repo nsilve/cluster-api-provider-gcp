@@ -368,7 +368,7 @@ func (s *Service) deleteInstanceGroups(ctx context.Context) error {
 				log.Error(err, "Error deleting a instancegroup", "name", spec.Name)
 				return err
 			}
-
+			/// why not outside the loop?
 			delete(s.scope.Network().APIServerInstanceGroups, zone)
 		}
 	}

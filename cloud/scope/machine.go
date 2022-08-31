@@ -128,6 +128,12 @@ func (m *MachineScope) ControlPlaneGroupName() string {
 	return fmt.Sprintf("%s-%s-%s", m.ClusterGetter.Name(), infrav1.APIServerRoleTagValue, m.Zone())
 }
 
+// WorkerGroupName returns the worker instance group name.
+func (m *MachineScope) WorkerGroupName(zone string) string {
+	//return fmt.Sprintf("%s-%s-%s", m.ClusterGetter.Name(), infrav1.WorkerRoleTagValue, m.Zone())
+	return fmt.Sprintf("%s-%s-%s", m.ClusterGetter.Name(), infrav1.WorkerRoleTagValue, zone)
+}
+
 // IsControlPlane returns true if the machine is a control plane.
 func (m *MachineScope) IsControlPlane() bool {
 	return util.IsControlPlaneMachine(m.Machine)

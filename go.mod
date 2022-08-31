@@ -2,6 +2,8 @@ module sigs.k8s.io/cluster-api-provider-gcp
 
 go 1.18
 
+replace github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0 => github.com/charlie-haley/k8s-cloud-provider v1.18.1-0.20220714094357-11a8da07efe9
+
 require (
 	github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0
 	github.com/google/go-cmp v0.5.8

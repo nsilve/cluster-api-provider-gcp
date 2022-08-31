@@ -309,6 +309,16 @@ func (s *ClusterScope) InstanceGroupSpec(zone string) *compute.InstanceGroup {
 	}
 }
 
+func (s *ClusterScope) ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager {
+	return &compute.InstanceGroupManager{
+		//Name:             s.WorkerGroupName(),
+		Name:             fmt.Sprintf("%s-%s-%s", s.Name(), infrav1.WorkerRoleTagValue, zone),
+		Region:           s.Region(),
+		TargetSize:       1,
+		InstanceTemplate: "global/instanceTemplates/instance-template-1",
+	}
+}
+
 // TargetTCPProxySpec returns google compute target-tcp-proxy spec.
 func (s *ClusterScope) TargetTCPProxySpec() *compute.TargetTcpProxy {
 	return &compute.TargetTcpProxy{

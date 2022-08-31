@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/instancegroups"
 	"time"
 
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/filter"
@@ -65,6 +66,12 @@ func (r *GCPClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 		For(&infrav1.GCPCluster{}).
 		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, r.WatchFilterValue)).
 		WithEventFilter(predicates.ResourceIsNotExternallyManaged(log)).
+		//Owns(&v1beta1.MachinePool{}).
+		//Owns(&infrav1exp.GCPMachinePool{}).
+		//Watches(
+		//	&source.Kind{Type: v1beta1.MachinePool{}},
+		//	handler.EnqueueRequestsFromMapFunc(///////)
+		//	)
 		Build(r)
 	if err != nil {
 		return errors.Wrap(err, "error creating controller")
@@ -199,6 +206,7 @@ func (r *GCPClusterReconciler) reconcile(ctx context.Context, clusterScope *scop
 		networks.New(clusterScope),
 		firewalls.New(clusterScope),
 		loadbalancers.New(clusterScope),
+		instancegroups.New(clusterScope),
 	}
 
 	for _, r := range reconcilers {

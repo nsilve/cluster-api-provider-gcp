@@ -334,6 +334,7 @@ generate-go: $(CONTROLLER_GEN) $(CONVERSION_GEN) ## Runs Go related generate tar
 generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
+		paths=./exp/api/... \
 		crd:crdVersions=v1 \
 		rbac:roleName=manager-role \
 		output:crd:dir=$(CRD_ROOT) \
@@ -341,6 +342,7 @@ generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 		webhook
 	$(CONTROLLER_GEN) \
 		paths=./controllers/... \
+		paths=./exp/controllers/... \
 		output:rbac:dir=$(RBAC_ROOT) \
 		rbac:roleName=manager-role
 

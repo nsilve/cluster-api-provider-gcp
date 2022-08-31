@@ -9,13 +9,50 @@ metadata:
 spec:
   group: infrastructure.cluster.x-k8s.io
   names:
+    categories:
+    - cluster-api
     kind: GCPMachinePool
     listKind: GCPMachinePoolList
     plural: gcpmachinepools
+    shortNames:
+    - gcpmp
     singular: gcpmachinepool
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: GCPMachinePool replicas count
+      jsonPath: .status.replicas
+      name: Replicas
+      type: string
+    - description: GCPMachinePool replicas count
+      jsonPath: .status.ready
+      name: Ready
+      type: string
+    - description: GCP Instance Group provisioning state
+      jsonPath: .status.provisioningState
+      name: State
+      type: string
+    - description: Cluster to which this GCPMachinePool belongs
+      jsonPath: .metadata.labels.cluster\.x-k8s\.io/cluster-name
+      name: Cluster
+      priority: 1
+      type: string
+    - description: MachinePool object to which this GCPMachinePool belongs
+      jsonPath: .metadata.ownerReferences[?(@.kind=="MachinePool")].name
+      name: MachinePool
+      priority: 1
+      type: string
+    - description: GCP Instance Group ID
+      jsonPath: .spec.providerID
+      name: Instance Group ID
+      priority: 1
+      type: string
+    - description: GCP VM Size
+      jsonPath: .spec.template.vmSize
+      name: VM Size
+      priority: 1
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: GCPMachinePool is the Schema for the gcpmachinepools API
@@ -36,8 +73,8 @@ spec:
             description: GCPMachinePoolSpec defines the desired state of GCPMachinePool
             properties:
               foo:
-                description: Foo is an example field of GCPMachinePool. Edit gcpmachinepool_types.go
-                  to remove/update
+                description: Foo is an example fiGCPMachine instance is runningeld
+                  of GCPMachinePool. Edit gcpmachinepool_types.go to remove/update
                 type: string
             type: object
           status:
