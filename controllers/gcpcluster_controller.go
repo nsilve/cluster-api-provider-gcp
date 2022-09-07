@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/instancegroups"
 	"time"
 
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/filter"
@@ -206,7 +205,6 @@ func (r *GCPClusterReconciler) reconcile(ctx context.Context, clusterScope *scop
 		networks.New(clusterScope),
 		firewalls.New(clusterScope),
 		loadbalancers.New(clusterScope),
-		instancegroups.New(clusterScope),
 	}
 
 	for _, r := range reconcilers {

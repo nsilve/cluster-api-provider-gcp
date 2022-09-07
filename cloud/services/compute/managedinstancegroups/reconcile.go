@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package instancegroups
+package managedinstancegroups
 
 import (
 	"context"
@@ -24,12 +24,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// Reconcile reconcile cluster instancegroup components.
+// Reconcile reconcile cluster managedinstancegroup components.
 func (s *Service) Reconcile(ctx context.Context) error {
 	log := log.FromContext(ctx)
-	log.Info("Reconciling instancegroup resources")
-	//instancegroups, err := s.createOrGetInstanceGroups(ctx)
-	_, err := s.createOrGetInstanceGroups(ctx)
+	log.Info("Reconciling managedinstancegroup resources")
+
+	//managedinstancegroups, err := s.createOrGetManagedInstanceGroups(ctx)
+	_, err := s.createOrGetManagedInstanceGroups(ctx)
 	if err != nil {
 		return err
 	}
@@ -39,7 +40,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	//	return err
 	//}
 	//
-	//backendsvc, err := s.createOrGetBackendService(ctx, instancegroups, healthcheck)
+	//backendsvc, err := s.createOrGetBackendService(ctx, managedinstancegroups, healthcheck)
 	//if err != nil {
 	//	return err
 	//}
@@ -59,10 +60,10 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	return nil
 }
 
-// Delete delete cluster control-plane instancegroup compoenents.
+// Delete delete cluster control-plane managedinstancegroup compoenents.
 func (s *Service) Delete(ctx context.Context) error {
 	log := log.FromContext(ctx)
-	log.Info("Deleting instancegroup resources")
+	log.Info("Deleting managedinstancegroup resources")
 	//if err := s.deleteForwardingRule(ctx); err != nil {
 	//	return err
 	//}
@@ -83,10 +84,10 @@ func (s *Service) Delete(ctx context.Context) error {
 	//	return err
 	//}
 
-	return s.deleteInstanceGroups(ctx)
+	return s.deleteManagedInstanceGroups(ctx)
 }
 
-func (s *Service) createOrGetInstanceGroups(ctx context.Context) ([]*compute.InstanceGroupManager, error) {
+func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) ([]*compute.InstanceGroupManager, error) {
 	log := log.FromContext(ctx)
 	fd := s.scope.FailureDomains()
 	zones := make([]string, 0, len(fd))
@@ -102,21 +103,21 @@ func (s *Service) createOrGetInstanceGroups(ctx context.Context) ([]*compute.Ins
 
 	for _, zone := range zones {
 		instancegroupSpec := s.scope.ManagedInstanceGroupSpec(zone)
-		log.V(2).Info("Looking for instancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-		instancegroup, err := s.instancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+		log.V(2).Info("Looking for managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+		instancegroup, err := s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
 		if err != nil {
 			if !gcperrors.IsNotFound(err) {
-				log.Error(err, "Error looking for instancegroup in zone", "zone", zone)
+				log.Error(err, "Error looking for managedinstancegroup in zone", "zone", zone)
 				return groups, err
 			}
 
-			log.V(2).Info("Creating instancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-			if err := s.instancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
-				log.Error(err, "Error creating instancegroup", "name", instancegroupSpec.Name)
+			log.V(2).Info("Creating managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+			if err := s.managedinstancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
+				log.Error(err, "Error creating managedinstancegroup", "name", instancegroupSpec.Name)
 				return groups, err
 			}
 
-			instancegroup, err = s.instancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+			instancegroup, err = s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
 			if err != nil {
 				return groups, err
 			}
@@ -430,15 +431,16 @@ func (s *Service) createOrGetInstanceGroups(ctx context.Context) ([]*compute.Ins
 //	return nil
 //}
 
-func (s *Service) deleteInstanceGroups(ctx context.Context) error {
+func (s *Service) deleteManagedInstanceGroups(ctx context.Context) error {
 	log := log.FromContext(ctx)
 	for zone := range s.scope.Network().WorkerInstanceGroups {
 		spec := s.scope.ManagedInstanceGroupSpec(zone)
+
 		key := meta.ZonalKey(spec.Name, zone)
-		log.V(2).Info("Deleting a instancegroup", "name", spec.Name)
-		if err := s.instancegroups.Delete(ctx, key); err != nil {
+		log.V(2).Info("Deleting a managedinstancegroup", "name", spec.Name)
+		if err := s.managedinstancegroups.Delete(ctx, key); err != nil {
 			if !gcperrors.IsNotFound(err) {
-				log.Error(err, "Error deleting a instancegroup", "name", spec.Name)
+				log.Error(err, "Error deleting a managedinstancegroup", "name", spec.Name)
 				return err
 			}
 		}

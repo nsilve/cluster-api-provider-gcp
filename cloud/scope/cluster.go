@@ -314,6 +314,7 @@ func (s *ClusterScope) ManagedInstanceGroupSpec(zone string) *compute.InstanceGr
 		//Name:             s.WorkerGroupName(),
 		Name:             fmt.Sprintf("%s-%s-%s", s.Name(), infrav1.WorkerRoleTagValue, zone),
 		Region:           s.Region(),
+		Zone:             zone,
 		TargetSize:       1,
 		InstanceTemplate: "global/instanceTemplates/instance-template-1",
 	}

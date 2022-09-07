@@ -19,19 +19,12 @@ package scope
 
 import (
 	"context"
-	"fmt"
 	"github.com/pkg/errors"
-	"google.golang.org/api/compute/v1"
-	"k8s.io/utils/pointer"
-	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/controllers/noderefutil"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
 )
 
 // MachinePoolScopeParams defines the input parameters used to create a new MachinePoolScope.
@@ -78,148 +71,112 @@ type MachinePoolScope struct {
 	GCPMachinePool *infrav1exp.GCPMachinePool
 }
 
-func (m *MachinePoolScope) Region() string {
-	return m.ClusterGetter.Region()
-}
+//
+//func (m *MachinePoolScope) Region() string {
+//	return m.ClusterGetter.Region()
+//}
+//
+//func (m *MachinePoolScope) NetworkName() string {
+//	return m.ClusterGetter.NetworkName()
+//}
+//
+//func (m *MachinePoolScope) Network() *infrav1.Network {
+//	return m.ClusterGetter.Network()
+//}
+//
+//func (m *MachinePoolScope) AdditionalLabels() infrav1.Labels {
+//	return m.ClusterGetter.AdditionalLabels()
+//}
 
-func (m *MachinePoolScope) NetworkName() string {
-	return m.ClusterGetter.NetworkName()
-}
+//
+//func (m *MachinePoolScope) FailureDomains() clusterv1.FailureDomains {
+//	return m.ClusterGetter.FailureDomains()
+//}
 
-func (m *MachinePoolScope) Network() *infrav1.Network {
-	return m.ClusterGetter.Network()
-}
-
-func (m *MachinePoolScope) AdditionalLabels() infrav1.Labels {
-	return m.ClusterGetter.AdditionalLabels()
-}
-
-func (m *MachinePoolScope) FailureDomains() clusterv1.FailureDomains {
-	return m.ClusterGetter.FailureDomains()
-}
-
-func (m *MachinePoolScope) ControlPlaneEndpoint() clusterv1.APIEndpoint {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) SetControlPlaneEndpoint(endpoint clusterv1.APIEndpoint) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) AddressSpec() *compute.Address {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) BackendServiceSpec() *compute.BackendService {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) ForwardingRuleSpec() *compute.ForwardingRule {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) HealthCheckSpec() *compute.HealthCheck {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MachinePoolScope) ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager {
-	return &compute.InstanceGroupManager{
-		Name:             m.WorkerGroupName(zone),
-		Region:           m.Region(),
-		TargetSize:       1,
-		InstanceTemplate: "global/instanceTemplates/instance-template-1",
-	}
-}
-
-func (m *MachinePoolScope) TargetTCPProxySpec() *compute.TargetTcpProxy {
-	//TODO implement me
-	panic("implement me")
-}
+//
+//func (m *MachinePoolScope) TargetTCPProxySpec() *compute.TargetTcpProxy {
+//	//TODO implement me
+//	panic("implement me")
+//}
 
 // ANCHOR: MachineGetter
 
-// Cloud returns initialized cloud.
-func (m *MachinePoolScope) Cloud() cloud.Cloud {
-	return m.ClusterGetter.Cloud()
-}
+//// Cloud returns initialized cloud.
+//func (m *MachinePoolScope) Cloud() cloud.Cloud {
+//	return m.ClusterGetter.Cloud()
+//}
 
-// Zone returns the FailureDomain for the GCPMachinePool.
-func (m *MachinePoolScope) Zone() string {
-	//////////
-	if m.MachinePool.Spec.FailureDomains == nil {
-		fd := m.ClusterGetter.FailureDomains()
-		if len(fd) == 0 {
-			return ""
-		}
-		zones := make([]string, 0, len(fd))
-		for zone := range fd {
-			zones = append(zones, zone)
-		}
-		sort.Strings(zones)
-		return zones[0]
-	}
-	return m.MachinePool.Spec.FailureDomains[0]
-}
+//// Zone returns the FailureDomain for the GCPMachinePool.
+//func (m *MachinePoolScope) Zone() string {
+//	//////////
+//	if m.MachinePool.Spec.FailureDomains == nil {
+//		fd := m.ClusterGetter.FailureDomains()
+//		if len(fd) == 0 {
+//			return ""
+//		}
+//		zones := make([]string, 0, len(fd))
+//		for zone := range fd {
+//			zones = append(zones, zone)
+//		}
+//		sort.Strings(zones)
+//		return zones[0]
+//	}
+//	return m.MachinePool.Spec.FailureDomains[0]
+//}
+//
+//// Project return the project for the GCPMachinePool's cluster.
+//func (m *MachinePoolScope) Project() string {
+//	return m.ClusterGetter.Project()
+//}
+//
+//// Name returns the GCPMachinePool name.
+//func (m *MachinePoolScope) Name() string {
+//	return m.GCPMachinePool.Name
+//}
+//
+//// Namespace returns the namespace name.
+//func (m *MachinePoolScope) Namespace() string {
+//	return m.GCPMachinePool.Namespace
+//}
 
-// Project return the project for the GCPMachinePool's cluster.
-func (m *MachinePoolScope) Project() string {
-	return m.ClusterGetter.Project()
-}
-
-// Name returns the GCPMachinePool name.
-func (m *MachinePoolScope) Name() string {
-	return m.GCPMachinePool.Name
-}
-
-// Namespace returns the namespace name.
-func (m *MachinePoolScope) Namespace() string {
-	return m.GCPMachinePool.Namespace
-}
-
-// WorkerGroupName returns the worker instance group name.
-func (m *MachinePoolScope) WorkerGroupName(zone string) string {
-	return fmt.Sprintf("%s-%s-%s", m.ClusterGetter.Name(), infrav1.WorkerRoleTagValue, zone)
-}
-
-// IsControlPlane returns true if the machine is a control plane.
-func (m *MachinePoolScope) IsControlPlane() bool {
-	//return util.IsControlPlaneMachine(m.Machine)
-	return false ////
-}
-
-// Role returns the machine role from the labels.
-func (m *MachinePoolScope) Role() string {
-	//if util.IsControlPlaneMachine(m.Machine) {
-	//	return "control-plane"
-	//}
-
-	return "node"
-}
-
-// GetInstanceID returns the GCPMachine instance id by parsing Spec.ProviderID.
-func (m *MachinePoolScope) GetInstanceID() *string {
-	parsed, err := noderefutil.NewProviderID(m.GetProviderID())
-	if err != nil {
-		return nil
-	}
-
-	return pointer.StringPtr(parsed.ID())
-}
-
-// GetProviderID returns the GCPMachine providerID from the spec.
-func (m *MachinePoolScope) GetProviderID() string {
-	//if m.GCPMachine.Spec.ProviderID != nil {
-	//	return *m.GCPMachine.Spec.ProviderID
-	//}
-
-	return ""
-}
+//// WorkerGroupName returns the worker instance group name.
+//func (m *MachinePoolScope) WorkerGroupName(zone string) string {
+//	return fmt.Sprintf("%s-%s-%s", m.ClusterGetter.Name(), infrav1.WorkerRoleTagValue, zone)
+//}
+//
+//// IsControlPlane returns true if the machine is a control plane.
+//func (m *MachinePoolScope) IsControlPlane() bool {
+//	//return util.IsControlPlaneMachine(m.Machine)
+//	return false ////
+//}
+//
+//// Role returns the machine role from the labels.
+//func (m *MachinePoolScope) Role() string {
+//	//if util.IsControlPlaneMachine(m.Machine) {
+//	//	return "control-plane"
+//	//}
+//
+//	return "node"
+//}
+//
+//// GetInstanceID returns the GCPMachine instance id by parsing Spec.ProviderID.
+//func (m *MachinePoolScope) GetInstanceID() *string {
+//	parsed, err := noderefutil.NewProviderID(m.GetProviderID())
+//	if err != nil {
+//		return nil
+//	}
+//
+//	return pointer.StringPtr(parsed.ID())
+//}
+//
+//// GetProviderID returns the GCPMachine providerID from the spec.
+//func (m *MachinePoolScope) GetProviderID() string {
+//	//if m.GCPMachine.Spec.ProviderID != nil {
+//	//	return *m.GCPMachine.Spec.ProviderID
+//	//}
+//
+//	return ""
+//}
 
 // ANCHOR_END: MachineGetter
 

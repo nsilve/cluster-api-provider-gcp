@@ -26,22 +26,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
-	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/instancegroups"
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/managedinstancegroups"
+	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
+	"sigs.k8s.io/cluster-api/util/predicates"
 	"sigs.k8s.io/cluster-api/util/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"time"
-
-	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
-	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // GCPMachinePoolReconciler reconciles a GCPMachinePool object
@@ -60,13 +61,38 @@ type GCPMachinePoolReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
 	log := ctrl.LoggerFrom(ctx)
-	return ctrl.NewControllerManagedBy(mgr).
+
+	//var rc reconcile.Reconciler = r
+	//if options.Cache != nil {
+	//	r = coalescing.NewReconciler(ampr, options.Cache, log)
+	//}
+
+	c, err := ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1exp.GCPMachinePool{}).
 		Watches(
 			&source.Kind{Type: &clusterv1exp.MachinePool{}},
 			handler.EnqueueRequestsFromMapFunc(machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("GCPMachinePool"), log)),
 		).
-		Complete(r)
+		Watches(
+			&source.Kind{Type: &infrav1.GCPCluster{}},
+			handler.EnqueueRequestsFromMapFunc(r.GCPClusterToGCPMachinePools(ctx)),
+		).
+		Build(r)
+	if err != nil {
+		return errors.Wrap(err, "error creating controller")
+	}
+
+	// Add a watch on clusterv1.Cluster object for unpause & ready notifications.
+	if err := c.Watch(
+		&source.Kind{Type: &clusterv1.Cluster{}},
+		handler.EnqueueRequestsFromMapFunc(r.ClusterToGCPMachinePools(ctx)),
+		predicates.ClusterUnpausedAndInfrastructureReady(log),
+	); err != nil {
+		return errors.Wrap(err, "failed adding a watch for ready clusters")
+	}
+
+	return nil
+
 }
 
 func getOwnerMachinePool(ctx context.Context, c client.Client, obj metav1.ObjectMeta) (*clusterv1exp.MachinePool, error) {
@@ -214,17 +240,17 @@ func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machineP
 
 	if !clusterScope.Cluster.Status.InfrastructureReady {
 		log.Info("Cluster infrastructure is not ready yet")
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	//// Make sure bootstrap data is available and populated.
+	// Make sure bootstrap data is available and populated.
 	//if machinePoolScope.MachinePool.Spec.Template.Spec.Bootstrap.DataSecretName == nil {
 	//	log.Info("Bootstrap data secret reference is not yet available")
 	//	return reconcile.Result{}, nil
 	//}
 
-	if err := instancegroups.New(machinePoolScope).Reconcile(ctx); err != nil {
-		log.Error(err, "Error reconciling instancegroup resources")
+	if err := managedinstancegroups.New(clusterScope).Reconcile(ctx); err != nil {
+		log.Error(err, "Error reconciling managedinstancegroup resources")
 		record.Warnf(machinePoolScope.GCPMachinePool, "GCPMachinePoolReconcile", "Reconcile error - %v", err)
 		return ctrl.Result{}, err
 	}
@@ -283,8 +309,8 @@ func (ampr *GCPMachinePoolReconciler) reconcileDelete(ctx context.Context, machi
 	log = log.WithValues("cluster", clusterScope.Name())
 	log.Info("Reconciling delete GCPMachinePool")
 
-	if err := instancegroups.New(machinePoolScope).Delete(ctx); err != nil {
-		log.Error(err, "Error reconciling delete instancegroup resources")
+	if err := managedinstancegroups.New(clusterScope).Delete(ctx); err != nil {
+		log.Error(err, "Error reconciling delete managedinstancegroup resources")
 		record.Warnf(machinePoolScope.GCPMachinePool, "GCPMachinePoolReconcile", "Reconcile delete error - %v", err)
 		return ctrl.Result{}, err
 	}
@@ -336,6 +362,8 @@ func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Lo
 			return nil
 		}
 
+		log.Info(fmt.Sprintf("machinePoolToInfrastructureMapFunc reconcile %s.%s", ref.Name, m.Namespace))
+
 		return []reconcile.Request{
 			{
 				NamespacedName: client.ObjectKey{
@@ -344,5 +372,89 @@ func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Lo
 				},
 			},
 		}
+	}
+}
+
+// GCPClusterToGCPMachinePools is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
+// of GCPMachinePools.
+func (r *GCPMachinePoolReconciler) GCPClusterToGCPMachinePools(ctx context.Context) handler.MapFunc {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info(">>> Reconcile GCPMachinePool due to GCPCluster")
+	return func(o client.Object) []ctrl.Request {
+		result := []ctrl.Request{}
+
+		c, ok := o.(*infrav1.GCPCluster)
+		if !ok {
+			log.Error(errors.Errorf("expected a GCPCluster but got a %T", o), "failed to get GCPMachinePool for GCPCluster")
+			return nil
+		}
+
+		cluster, err := util.GetOwnerCluster(ctx, r.Client, c.ObjectMeta)
+		switch {
+		case apierrors.IsNotFound(err) || cluster == nil:
+			return result
+		case err != nil:
+			log.Error(err, "failed to get owning cluster")
+			return result
+		}
+
+		labels := map[string]string{clusterv1.ClusterLabelName: cluster.Name}
+		machinePoolList := &clusterv1exp.MachinePoolList{}
+		if err := r.List(ctx, machinePoolList, client.InNamespace(c.Namespace), client.MatchingLabels(labels)); err != nil {
+			log.Error(err, "failed to list MachinePools")
+			return nil
+		}
+		for _, m := range machinePoolList.Items {
+			if m.Spec.Template.Spec.InfrastructureRef.Name == "" {
+				log.Info("GCPClusterToGCPMachinePools empty spec.Template.Spec.InfrastructureRef.Name")
+				continue
+			}
+			name := client.ObjectKey{Namespace: m.Namespace, Name: m.Name}
+			result = append(result, ctrl.Request{NamespacedName: name})
+		}
+
+		return result
+	}
+}
+
+// ClusterToGCPMachinePools is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
+// of GCPMachinePools.
+func (r *GCPMachinePoolReconciler) ClusterToGCPMachinePools(ctx context.Context) handler.MapFunc {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info(">>> Reconcile GCPMachinePool due to Cluster")
+	return func(o client.Object) []ctrl.Request {
+		result := []ctrl.Request{}
+
+		c, ok := o.(*clusterv1.Cluster)
+		if !ok {
+			log.Error(errors.Errorf("expected a Cluster but got a %T", o), "failed to get GCPMachinePool for Cluster")
+			return nil
+		}
+
+		cluster, err := util.GetOwnerCluster(ctx, r.Client, c.ObjectMeta)
+		switch {
+		case apierrors.IsNotFound(err) || cluster == nil:
+			return result
+		case err != nil:
+			log.Error(err, "failed to get owning cluster")
+			return result
+		}
+
+		labels := map[string]string{clusterv1.ClusterLabelName: cluster.Name}
+		machinePoolList := &clusterv1exp.MachinePoolList{}
+		if err := r.List(ctx, machinePoolList, client.InNamespace(c.Namespace), client.MatchingLabels(labels)); err != nil {
+			log.Error(err, "failed to list MachinePools")
+			return nil
+		}
+		for _, m := range machinePoolList.Items {
+			if m.Spec.Template.Spec.InfrastructureRef.Name == "" {
+				log.Info("ClusterToGCPMachinePools empty spec.Template.Spec.InfrastructureRef.Name")
+				continue
+			}
+			name := client.ObjectKey{Namespace: m.Namespace, Name: m.Name}
+			result = append(result, ctrl.Request{NamespacedName: name})
+		}
+
+		return result
 	}
 }

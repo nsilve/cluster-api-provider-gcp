@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package instancegroups implements reconciler for cluster instancegroup components.
-package instancegroups
+// Package managedinstancegroups implements reconciler for cluster managedinstancegroup components.
+package managedinstancegroups
