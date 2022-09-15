@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package managedinstancegroups
+package instancetemplates
 
 import (
 	"context"
@@ -24,24 +24,25 @@ import (
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud"
 )
 
-type managedinstancegroupsInterface interface {
-	Get(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error)
-	List(ctx context.Context, zone string, fl *filter.F) ([]*compute.InstanceGroupManager, error)
-	Insert(ctx context.Context, key *meta.Key, obj *compute.InstanceGroupManager) error
+type instancetemplatesInterface interface {
+	Get(ctx context.Context, key *meta.Key) (*compute.InstanceTemplate, error)
+	List(ctx context.Context, fl *filter.F) ([]*compute.InstanceTemplate, error)
+	Insert(ctx context.Context, key *meta.Key, obj *compute.InstanceTemplate) error
 	Delete(ctx context.Context, key *meta.Key) error
 }
 
 // Scope is an interfaces that hold used methods.
 type Scope interface {
-	cloud.ClusterGetter
-	//cloud.MachineTemplate
-	ManagedInstanceGroupSpec() *compute.InstanceGroupManager
+	cloud.ClusterGetterSimple
+	cloud.MachineTemplate
+	InstanceTemplateSpec() *compute.InstanceTemplate
+	//ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager
 }
 
 // Service implements instancegroups reconciler.
 type Service struct {
-	scope                 Scope
-	managedinstancegroups managedinstancegroupsInterface
+	scope             Scope
+	instancetemplates instancetemplatesInterface
 }
 
 var _ cloud.Reconciler = &Service{}
@@ -49,7 +50,7 @@ var _ cloud.Reconciler = &Service{}
 // New returns Service from given scope.
 func New(scope Scope) *Service {
 	return &Service{
-		scope:                 scope,
-		managedinstancegroups: scope.Cloud().InstanceGroupManagers(),
+		scope:             scope,
+		instancetemplates: scope.Cloud().InstanceTemplates(),
 	}
 }

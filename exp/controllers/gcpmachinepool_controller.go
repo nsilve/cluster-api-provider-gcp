@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/instancetemplates"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/managedinstancegroups"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
@@ -42,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"strings"
 	"time"
 )
 
@@ -57,6 +60,9 @@ type GCPMachinePoolReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinepools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinepools/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machinepools;machinepools/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates/finalizers,verbs=update
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
@@ -68,15 +74,22 @@ func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctr
 	//}
 
 	c, err := ctrl.NewControllerManagedBy(mgr).
+		WithOptions(options).
 		For(&infrav1exp.GCPMachinePool{}).
-		Watches(
-			&source.Kind{Type: &clusterv1exp.MachinePool{}},
-			handler.EnqueueRequestsFromMapFunc(machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("GCPMachinePool"), log)),
-		).
-		Watches(
-			&source.Kind{Type: &infrav1.GCPCluster{}},
-			handler.EnqueueRequestsFromMapFunc(r.GCPClusterToGCPMachinePools(ctx)),
-		).
+		//WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(ctrl.LoggerFrom(ctx), r.WatchFilterValue)).
+		//Watches(
+		//	&source.Kind{Type: &clusterv1exp.MachinePool{}},
+		//	handler.EnqueueRequestsFromMapFunc(r.machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("GCPMachinePool"), log)),
+		//).
+		//Watches(
+		//	&source.Kind{Type: &infrav1.GCPCluster{}},
+		//	handler.EnqueueRequestsFromMapFunc(r.GCPClusterToGCPMachinePools(ctx)),
+		//).
+		//Watches(
+		//	&source.Kind{Type: &infrav1.GCPMachineTemplate{}},
+		//	handler.EnqueueRequestsFromMapFunc(r.GCPMachineTemplateToGCPMachinePools(ctx)),
+		//	//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		//).
 		Build(r)
 	if err != nil {
 		return errors.Wrap(err, "error creating controller")
@@ -89,6 +102,13 @@ func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctr
 		predicates.ClusterUnpausedAndInfrastructureReady(log),
 	); err != nil {
 		return errors.Wrap(err, "failed adding a watch for ready clusters")
+	}
+
+	if err := c.Watch(
+		&source.Kind{Type: &infrav1.GCPMachineTemplate{}},
+		handler.EnqueueRequestsFromMapFunc(r.GCPMachineTemplateToGCPMachinePools(ctx, log)),
+	); err != nil {
+		return errors.Wrap(err, "failed adding a watch for GCPMachineTemplate")
 	}
 
 	return nil
@@ -125,6 +145,7 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	defer cancel()
 
 	log := ctrl.LoggerFrom(ctx)
+	log.Info(">>> GCPMachinePoolReconciler <<<")
 	gcpMachinePool := &infrav1exp.GCPMachinePool{}
 	err := r.Get(ctx, req.NamespacedName, gcpMachinePool)
 	if err != nil {
@@ -179,12 +200,48 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	if gcpMachinePool.Spec.InfrastructureRef == nil {
+		log.Info(fmt.Sprintf("GCPMachinePool [%s] has empty InfrastructureRef", gcpMachinePool.Name))
+
+	}
+
+	if gcpMachinePool.Spec.InfrastructureRef.Kind != "GCPMachineTemplate" {
+		log.Info(fmt.Sprintf("GCPMachinePool [%s] has an InfrastructureRef of type [%s] and not the expected [GCPMachineTemplate]", gcpMachinePool.Name, gcpMachinePool.Spec.InfrastructureRef.GroupVersionKind()))
+	}
+
+	gcpMachineTemplateNamespacedName := client.ObjectKey{
+		//Namespace: gcpMachinePool.Spec.InfrastructureRef.Namespace,
+		Namespace: gcpMachinePool.Namespace, // add default value via webhook???
+		Name:      gcpMachinePool.Spec.InfrastructureRef.Name,
+	}
+
+	gcpMachineTemplate := &infrav1.GCPMachineTemplate{}
+	err = r.Get(ctx, gcpMachineTemplateNamespacedName, gcpMachineTemplate)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+
+		return ctrl.Result{}, err
+	}
+
 	// Create the machine pool scope
 	machinePoolScope, err := scope.NewMachinePoolScope(scope.MachinePoolScopeParams{
-		Client:         r.Client,
-		ClusterGetter:  clusterScope,
-		MachinePool:    machinePool,
-		GCPMachinePool: gcpMachinePool,
+		Client:             r.Client,
+		ClusterGetter:      clusterScope,
+		MachinePool:        machinePool,
+		GCPMachinePool:     gcpMachinePool,
+		GCPMachineTemplate: gcpMachineTemplate,
+	})
+	if err != nil {
+		return ctrl.Result{}, errors.Errorf("failed to create scope: %+v", err)
+	}
+
+	// Create the machine template scope
+	machineTemplateScope, err := scope.NewMachineTemplateScope(scope.MachineTemplateScopeParams{
+		Client:             r.Client,
+		ClusterGetter:      clusterScope,
+		GCPMachineTemplate: gcpMachineTemplate,
 	})
 	if err != nil {
 		return ctrl.Result{}, errors.Errorf("failed to create scope: %+v", err)
@@ -192,6 +249,9 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Always close the scope when exiting this function so we can persist any GCPMachine changes.
 	defer func() {
+		if err := machineTemplateScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
 		if err := machinePoolScope.Close(); err != nil && reterr == nil {
 			reterr = err
 		}
@@ -202,11 +262,11 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Handle deleted machine pools
 	if !gcpMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, machinePoolScope, clusterScope)
+		return r.reconcileDelete(ctx, machinePoolScope, machineTemplateScope, clusterScope)
 	}
 
 	// Handle non-deleted machine pools
-	return r.reconcileNormal(ctx, machinePoolScope, clusterScope)
+	return r.reconcileNormal(ctx, machinePoolScope, machineTemplateScope, clusterScope)
 }
 
 // getMachinePoolByName finds and return a Machine object using the specified params.
@@ -219,7 +279,7 @@ func getMachinePoolByName(ctx context.Context, c client.Client, namespace, name 
 	return m, nil
 }
 
-func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machinePoolScope *scope.MachinePoolScope, clusterScope *scope.ClusterScope) (_ reconcile.Result, reterr error) {
+func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machinePoolScope *scope.MachinePoolScope, machineTemplateScope *scope.MachineTemplateScope, clusterScope *scope.ClusterScope) (_ reconcile.Result, reterr error) {
 	log := ctrl.LoggerFrom(ctx)
 	log = log.WithValues("cluster", clusterScope.Name())
 	log.Info("Reconciling GCPMachinePool")
@@ -249,7 +309,13 @@ func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machineP
 	//	return reconcile.Result{}, nil
 	//}
 
-	if err := managedinstancegroups.New(clusterScope).Reconcile(ctx); err != nil {
+	if err := instancetemplates.New(machineTemplateScope).Reconcile(ctx); err != nil {
+		log.Error(err, "Error reconciling instancetemplate resources")
+		record.Warnf(machinePoolScope.GCPMachinePool.Spec.InfrastructureRef, "GCPMachineTemplateReconcile", "Reconcile error - %v", err)
+		return ctrl.Result{}, err
+	}
+
+	if err := managedinstancegroups.New(machinePoolScope).Reconcile(ctx); err != nil {
 		log.Error(err, "Error reconciling managedinstancegroup resources")
 		record.Warnf(machinePoolScope.GCPMachinePool, "GCPMachinePoolReconcile", "Reconcile error - %v", err)
 		return ctrl.Result{}, err
@@ -301,17 +367,39 @@ func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machineP
 	//	}, nil
 	//}
 
+	// instancegroupSpec := s.scope.ManagedInstanceGroupSpec(zone)
+
+	zone := machinePoolScope.ManagedInstanceGroupSpec().Zone[strings.LastIndex(machinePoolScope.ManagedInstanceGroupSpec().Zone, "/")+1:]
+
+	mig, err := managedinstancegroups.New(machinePoolScope).GetManagedInstanceGroups(ctx, meta.ZonalKey(machinePoolScope.ManagedInstanceGroupSpec().Name, zone))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	//machinePoolScope.GCPMachinePool.Spec.ProviderID = mig.SelfLink
+	//fill ProviderIDList!!!
+
+	machinePoolScope.GCPMachinePool.Status.Ready = mig.Status.IsStable
+	//machinePoolScope.GCPMachinePool.Status.Replicas = int32(mig.TargetSize)
+	machinePoolScope.GCPMachinePool.Status.Replicas = 0
+
 	return reconcile.Result{}, nil
 }
 
-func (ampr *GCPMachinePoolReconciler) reconcileDelete(ctx context.Context, machinePoolScope *scope.MachinePoolScope, clusterScope *scope.ClusterScope) (reconcile.Result, error) {
+func (r *GCPMachinePoolReconciler) reconcileDelete(ctx context.Context, machinePoolScope *scope.MachinePoolScope, machineTemplateScope *scope.MachineTemplateScope, clusterScope *scope.ClusterScope) (reconcile.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	log = log.WithValues("cluster", clusterScope.Name())
 	log.Info("Reconciling delete GCPMachinePool")
 
-	if err := managedinstancegroups.New(clusterScope).Delete(ctx); err != nil {
+	if err := managedinstancegroups.New(machinePoolScope).Delete(ctx); err != nil {
 		log.Error(err, "Error reconciling delete managedinstancegroup resources")
 		record.Warnf(machinePoolScope.GCPMachinePool, "GCPMachinePoolReconcile", "Reconcile delete error - %v", err)
+		return ctrl.Result{}, err
+	}
+
+	if err := instancetemplates.New(machineTemplateScope).Delete(ctx); err != nil {
+		log.Error(err, "Error reconciling delete instancetemplate resources")
+		record.Warnf(machineTemplateScope.GCPMachineTemplate, "GCPMachineTemplateReconcile", "Reconcile delete error - %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -345,7 +433,7 @@ func (ampr *GCPMachinePoolReconciler) reconcileDelete(ctx context.Context, machi
 
 // machinePoolToInfrastructureMapFunc returns a handler.MapFunc that watches for
 // MachinePool events and returns reconciliation requests for an infrastructure provider object.
-func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Logger) handler.MapFunc {
+func (r *GCPMachinePoolReconciler) machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Logger) handler.MapFunc {
 	return func(o client.Object) []reconcile.Request {
 		m, ok := o.(*clusterv1exp.MachinePool)
 		if !ok {
@@ -377,8 +465,8 @@ func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Lo
 
 // GCPClusterToGCPMachinePools is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
 // of GCPMachinePools.
-func (r *GCPMachinePoolReconciler) GCPClusterToGCPMachinePools(ctx context.Context) handler.MapFunc {
-	log := ctrl.LoggerFrom(ctx)
+func (r *GCPMachinePoolReconciler) GCPClusterToGCPMachinePools(ctx context.Context, log logr.Logger) handler.MapFunc {
+	//log := ctrl.LoggerFrom(ctx)
 	log.Info(">>> Reconcile GCPMachinePool due to GCPCluster")
 	return func(o client.Object) []ctrl.Request {
 		result := []ctrl.Request{}
@@ -417,11 +505,50 @@ func (r *GCPMachinePoolReconciler) GCPClusterToGCPMachinePools(ctx context.Conte
 	}
 }
 
+// GCPMachineTemplateToGCPMachinePools is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
+// of GCPMachinePools.
+func (r *GCPMachinePoolReconciler) GCPMachineTemplateToGCPMachinePools(ctx context.Context, log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []ctrl.Request {
+		result := []ctrl.Request{}
+		c, ok := o.(*infrav1.GCPMachineTemplate)
+		if !ok {
+			log.Error(errors.Errorf("expected a GCPMachineTemplate but got a %T", o), "failed to get GCPMachinePool for GCPMachineTemplate")
+			return nil
+		}
+
+		cluster, err := util.GetOwnerCluster(ctx, r.Client, c.ObjectMeta)
+		switch {
+		case apierrors.IsNotFound(err) || cluster == nil:
+			return result
+		case err != nil:
+			log.Error(err, "failed to get owning cluster")
+			return result
+		}
+
+		labels := map[string]string{clusterv1.ClusterLabelName: cluster.Name}
+		machinePoolList := &clusterv1exp.MachinePoolList{}
+		if err := r.List(ctx, machinePoolList, client.InNamespace(c.Namespace), client.MatchingLabels(labels)); err != nil {
+			log.Error(err, "failed to list MachinePools")
+			return nil
+		}
+		for _, m := range machinePoolList.Items {
+			if m.Spec.Template.Spec.InfrastructureRef.Name == "" {
+				log.Info("GCPMachineTemplateToGCPMachinePools empty spec.Template.Spec.InfrastructureRef.Name")
+				continue
+			}
+			name := client.ObjectKey{Namespace: m.Namespace, Name: m.Name}
+			result = append(result, ctrl.Request{NamespacedName: name})
+		}
+
+		return result
+	}
+}
+
 // ClusterToGCPMachinePools is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
 // of GCPMachinePools.
 func (r *GCPMachinePoolReconciler) ClusterToGCPMachinePools(ctx context.Context) handler.MapFunc {
 	log := ctrl.LoggerFrom(ctx)
-	log.Info(">>> Reconcile GCPMachinePool due to Cluster")
+
 	return func(o client.Object) []ctrl.Request {
 		result := []ctrl.Request{}
 
@@ -458,3 +585,14 @@ func (r *GCPMachinePoolReconciler) ClusterToGCPMachinePools(ctx context.Context)
 		return result
 	}
 }
+
+//
+//func (r *GCPMachinePoolReconciler) getInstanceTemplateFromInstanceGroupManager(ctx context.Context, instanceGroupManager *compute.InstanceGroupManager) (*compute.InstanceTemplate, error) {
+//	log := log.FromContext(ctx)
+//
+//	name := instanceGroupManager.InstanceGroup
+//	log.Info("getInstanceTemplateFromInstanceGroupManager", "name", name)
+//
+//	//managedinstancegroups.New(r.
+//
+//}

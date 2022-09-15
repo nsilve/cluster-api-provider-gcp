@@ -19,9 +19,13 @@ package scope
 
 import (
 	"context"
+	"fmt"
 	"github.com/pkg/errors"
+	"google.golang.org/api/compute/v1"
+	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,10 +33,11 @@ import (
 
 // MachinePoolScopeParams defines the input parameters used to create a new MachinePoolScope.
 type MachinePoolScopeParams struct {
-	Client         client.Client
-	ClusterGetter  cloud.ClusterGetter
-	MachinePool    *clusterv1exp.MachinePool
-	GCPMachinePool *infrav1exp.GCPMachinePool
+	Client             client.Client
+	ClusterGetter      cloud.ClusterGetter
+	MachinePool        *clusterv1exp.MachinePool
+	GCPMachinePool     *infrav1exp.GCPMachinePool
+	GCPMachineTemplate *infrav1.GCPMachineTemplate
 }
 
 // NewMachinePoolScope creates a new MachinePoolScope from the supplied parameters.
@@ -47,6 +52,9 @@ func NewMachinePoolScope(params MachinePoolScopeParams) (*MachinePoolScope, erro
 	if params.GCPMachinePool == nil {
 		return nil, errors.New("gcp machinepool is required when creating a MachinePoolScope")
 	}
+	if params.GCPMachineTemplate == nil {
+		return nil, errors.New("gcp machinetemplate is required when creating a MachinePoolScope")
+	}
 
 	helper, err := patch.NewHelper(params.GCPMachinePool, params.Client)
 	if err != nil {
@@ -54,21 +62,93 @@ func NewMachinePoolScope(params MachinePoolScopeParams) (*MachinePoolScope, erro
 	}
 
 	return &MachinePoolScope{
-		client:         params.Client,
-		MachinePool:    params.MachinePool,
-		GCPMachinePool: params.GCPMachinePool,
-		ClusterGetter:  params.ClusterGetter,
-		patchHelper:    helper,
+		client:             params.Client,
+		MachinePool:        params.MachinePool,
+		GCPMachinePool:     params.GCPMachinePool,
+		ClusterGetter:      params.ClusterGetter,
+		patchHelper:        helper,
+		GCPMachineTemplate: params.GCPMachineTemplate,
 	}, nil
 }
 
 // MachinePoolScope defines a scope defined around a machinepool and its cluster.
 type MachinePoolScope struct {
-	client         client.Client
-	patchHelper    *patch.Helper
-	ClusterGetter  cloud.ClusterGetter
-	MachinePool    *clusterv1exp.MachinePool
-	GCPMachinePool *infrav1exp.GCPMachinePool
+	client             client.Client
+	patchHelper        *patch.Helper
+	ClusterGetter      cloud.ClusterGetter
+	MachinePool        *clusterv1exp.MachinePool
+	GCPMachinePool     *infrav1exp.GCPMachinePool
+	GCPMachineTemplate *infrav1.GCPMachineTemplate
+}
+
+func (m *MachinePoolScope) Zones() []string {
+	return m.ClusterGetter.Zones()
+}
+
+func (m *MachinePoolScope) Project() string {
+	return m.ClusterGetter.Project()
+}
+
+func (m *MachinePoolScope) Region() string {
+	return m.ClusterGetter.Region()
+}
+
+func (m *MachinePoolScope) NetworkName() string {
+	return m.ClusterGetter.NetworkName()
+}
+
+func (m *MachinePoolScope) Network() *infrav1.Network {
+	return m.ClusterGetter.Network()
+}
+
+func (m *MachinePoolScope) AdditionalLabels() infrav1.Labels {
+	return m.ClusterGetter.AdditionalLabels()
+}
+
+func (m *MachinePoolScope) FailureDomains() clusterv1.FailureDomains {
+	return m.ClusterGetter.FailureDomains()
+}
+
+func (m *MachinePoolScope) ControlPlaneEndpoint() clusterv1.APIEndpoint {
+	return m.ClusterGetter.ControlPlaneEndpoint()
+}
+
+func (m *MachinePoolScope) Cloud() cloud.Cloud {
+	return m.ClusterGetter.Cloud()
+}
+
+func (m *MachinePoolScope) Name() string {
+	return m.GCPMachinePool.Name
+}
+
+func (m *MachinePoolScope) Namespace() string {
+	return m.GCPMachinePool.Namespace
+}
+
+func (m *MachinePoolScope) ManagedInstanceGroupSpec() *compute.InstanceGroupManager {
+	//zones := m.ClusterGetter.Zones()
+	//
+	//dps := make([]*compute.DistributionPolicyZoneConfiguration, 0, len(zones))
+	//for _, zone := range zones {
+	//	dps = append(dps, &compute.DistributionPolicyZoneConfiguration{
+	//		Zone: fmt.Sprintf("zones/%s", zone),
+	//	})
+	//}
+
+	return &compute.InstanceGroupManager{
+		//Name:             s.WorkerGroupName(),
+		//Name:   fmt.Sprintf("%s-%s-%s", m.GCPMachinePool.Name, infrav1.WorkerRoleTagValue, m.GCPMachinePool.Spec.Zone),
+		Name:   m.GCPMachinePool.Name,
+		Region: m.GCPMachinePool.Spec.Region,
+		//DistributionPolicy: &compute.DistributionPolicy{
+		//	Zones:       dps,
+		//	TargetShape: "EVEN",
+		//},
+		Zone: fmt.Sprintf("zones/%s", m.GCPMachinePool.Spec.Zone),
+		//Zone:             zone,
+		TargetSize:       1,
+		InstanceTemplate: fmt.Sprintf("global/instanceTemplates/%s", m.GCPMachineTemplate.Name), // *m.GCPMachineTemplate.Spec.Template.Spec.Image, // global/instanceTemplates/instance-template-1
+	}
 }
 
 //

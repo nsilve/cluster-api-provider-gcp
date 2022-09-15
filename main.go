@@ -33,6 +33,12 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+
 	infrav1alpha3 "sigs.k8s.io/cluster-api-provider-gcp/api/v1alpha3"
 	infrav1alpha4 "sigs.k8s.io/cluster-api-provider-gcp/api/v1alpha4"
 	infrav1beta1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
@@ -41,11 +47,6 @@ import (
 	infrav1controllersexp "sigs.k8s.io/cluster-api-provider-gcp/exp/controllers"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 	"sigs.k8s.io/cluster-api-provider-gcp/version"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	expv1beta1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	//utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
@@ -63,7 +64,7 @@ func init() {
 	_ = infrav1beta1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
 	_ = infrav1beta1exp.AddToScheme(scheme)
-	_ = expv1beta1exp.AddToScheme(scheme)
+	_ = clusterv1exp.AddToScheme(scheme)
 
 	//utilruntime.Must(infrav1beta1exp.AddToScheme(scheme))
 	//_ = infrastructurev1beta1.AddToScheme(scheme)
@@ -71,23 +72,24 @@ func init() {
 }
 
 var (
-	enableLeaderElection        bool
-	metricsAddr                 string
-	leaderElectionNamespace     string
-	watchNamespace              string
-	profilerAddress             string
-	healthAddr                  string
-	watchFilterValue            string
-	webhookCertDir              string
-	gcpClusterConcurrency       int
-	gcpMachineConcurrency       int
-	gcpMachinePoolConcurrency   int
-	webhookPort                 int
-	reconcileTimeout            time.Duration
-	syncPeriod                  time.Duration
-	leaderElectionLeaseDuration time.Duration
-	leaderElectionRenewDeadline time.Duration
-	leaderElectionRetryPeriod   time.Duration
+	enableLeaderElection          bool
+	metricsAddr                   string
+	leaderElectionNamespace       string
+	watchNamespace                string
+	profilerAddress               string
+	healthAddr                    string
+	watchFilterValue              string
+	webhookCertDir                string
+	gcpClusterConcurrency         int
+	gcpMachineConcurrency         int
+	gcpMachinePoolConcurrency     int
+	gcpMachineTemplateConcurrency int
+	webhookPort                   int
+	reconcileTimeout              time.Duration
+	syncPeriod                    time.Duration
+	leaderElectionLeaseDuration   time.Duration
+	leaderElectionRenewDeadline   time.Duration
+	leaderElectionRetryPeriod     time.Duration
 )
 
 func main() {
@@ -166,7 +168,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&infrav1controllersexp.GCPMachinePoolReconciler{
-		Client: mgr.GetClient(),
+		Client:           mgr.GetClient(),
+		ReconcileTimeout: reconcileTimeout,
+		WatchFilterValue: watchFilterValue,
 		//Scheme: mgr.GetScheme(),
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: gcpMachinePoolConcurrency}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GCPMachinePool")
@@ -205,6 +209,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	//if err = (&controllers.GCPMachineTemplateReconciler{
+	//	Client: mgr.GetClient(),
+	//	Scheme: mgr.GetScheme(),
+	//}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: gcpMachineTemplateConcurrency}); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "GCPMachineTemplate")
+	//	os.Exit(1)
+	//}
 	// +kubebuilder:scaffold:builder
 	setupLog.Info("starting manager", "version", version.Get().String(), "extended_info", version.Get())
 	if err := mgr.Start(ctx); err != nil {
@@ -290,9 +301,15 @@ func initFlags(fs *pflag.FlagSet) {
 	)
 
 	fs.IntVar(&gcpMachinePoolConcurrency,
-		"gcppoolmachine-concurrency",
-		10,
-		"Number of GCPMachinePolls to process simultaneously",
+		"gcpmachinepool-concurrency",
+		1,
+		"Number of GCPMachinePools to process simultaneously",
+	)
+
+	fs.IntVar(&gcpMachineTemplateConcurrency,
+		"gcpmachinetemplate-concurrency",
+		1,
+		"Number of GCPMachineTemplates to process simultaneously",
 	)
 
 	fs.DurationVar(&syncPeriod,

@@ -51,7 +51,15 @@ type ClusterGetter interface {
 	Network() *infrav1.Network
 	AdditionalLabels() infrav1.Labels
 	FailureDomains() clusterv1.FailureDomains
+	Zones() []string
 	ControlPlaneEndpoint() clusterv1.APIEndpoint
+}
+
+// ClusterGetter is an interface which can get cluster informations.
+type ClusterGetterSimple interface {
+	Client
+	Name() string
+	Namespace() string
 }
 
 // ClusterSetter is an interface which can set cluster informations.
@@ -96,4 +104,36 @@ type MachineSetter interface {
 type Machine interface {
 	MachineGetter
 	MachineSetter
+}
+
+// MachineTemplateGetter is an interface which can get machinetemplate informations.
+type MachineTemplateGetter interface {
+	Client
+	Name() string
+	Namespace() string
+	//Project() string
+	//Role() string
+	//IsControlPlane() bool
+	//ControlPlaneGroupName() string
+	//WorkerGroupName(zone string) string
+	//GetInstanceID() *string
+	//GetProviderID() string
+	//GetBootstrapData() (string, error)
+	//GetInstanceStatus() *infrav1.InstanceStatus
+}
+
+// MachineTemplateSetter is an interface which can set machinetemplate informations.
+type MachineTemplateSetter interface {
+	//SetProviderID()
+	//SetInstanceStatus(v infrav1.InstanceStatus)
+	//SetFailureMessage(v error)
+	//SetFailureReason(v capierrors.MachineStatusError)
+	//SetAnnotation(key, value string)
+	//SetAddresses(addressList []corev1.NodeAddress)
+}
+
+// MachineTemplate is an interface which can get and set machinetemplate informations.
+type MachineTemplate interface {
+	MachineTemplateGetter
+	MachineTemplateSetter
 }

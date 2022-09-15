@@ -17,12 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
-	"reflect"
-
-	"github.com/pkg/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -51,39 +46,39 @@ func (r *GCPMachineTemplate) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (r *GCPMachineTemplate) ValidateUpdate(old runtime.Object) error {
-	newGCPMachineTemplate, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
-	if err != nil {
-		return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
-			field.InternalError(nil, errors.Wrap(err, "failed to convert new GCPMachineTemplate to unstructured object")),
-		})
-	}
-	oldGCPMachineTemplate, err := runtime.DefaultUnstructuredConverter.ToUnstructured(old)
-	if err != nil {
-		return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
-			field.InternalError(nil, errors.Wrap(err, "failed to convert old GCPMachineTemplate to unstructured object")),
-		})
-	}
+	//newGCPMachineTemplate, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	//if err != nil {
+	//	return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
+	//		field.InternalError(nil, errors.Wrap(err, "failed to convert new GCPMachineTemplate to unstructured object")),
+	//	})
+	//}
+	//oldGCPMachineTemplate, err := runtime.DefaultUnstructuredConverter.ToUnstructured(old)
+	//if err != nil {
+	//	return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
+	//		field.InternalError(nil, errors.Wrap(err, "failed to convert old GCPMachineTemplate to unstructured object")),
+	//	})
+	//}
 
-	newGCPMachineTemplateSpec := newGCPMachineTemplate["spec"].(map[string]interface{})
-	oldGCPMachineTemplateSpec := oldGCPMachineTemplate["spec"].(map[string]interface{})
-
-	// allow changes to providerID
-	delete(oldGCPMachineTemplateSpec, "providerID")
-	delete(newGCPMachineTemplateSpec, "providerID")
-
-	// allow changes to additionalLabels
-	delete(oldGCPMachineTemplateSpec, "additionalLabels")
-	delete(newGCPMachineTemplateSpec, "additionalLabels")
-
-	// allow changes to additionalNetworkTags
-	delete(oldGCPMachineTemplateSpec, "additionalNetworkTags")
-	delete(newGCPMachineTemplateSpec, "additionalNetworkTags")
-
-	if !reflect.DeepEqual(oldGCPMachineTemplateSpec, newGCPMachineTemplateSpec) {
-		return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
-			field.Forbidden(field.NewPath("spec"), "cannot be modified"),
-		})
-	}
+	//newGCPMachineTemplateSpec := newGCPMachineTemplate["spec"].(map[string]interface{})
+	//oldGCPMachineTemplateSpec := oldGCPMachineTemplate["spec"].(map[string]interface{})
+	//
+	//// allow changes to providerID
+	////delete(oldGCPMachineTemplateSpec, "template.metadata.spec.providerID")
+	//delete(newGCPMachineTemplateSpec, "providerID")
+	//
+	//// allow changes to additionalLabels
+	//delete(oldGCPMachineTemplateSpec, "additionalLabels")
+	//delete(newGCPMachineTemplateSpec, "additionalLabels")
+	//
+	//// allow changes to additionalNetworkTags
+	//delete(oldGCPMachineTemplateSpec, "additionalNetworkTags")
+	//delete(newGCPMachineTemplateSpec, "additionalNetworkTags")
+	//
+	//if !reflect.DeepEqual(oldGCPMachineTemplateSpec, newGCPMachineTemplateSpec) {
+	//	return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
+	//		field.Forbidden(field.NewPath("spec"), "cannot be modified"),
+	//	})
+	//}
 
 	return nil
 }

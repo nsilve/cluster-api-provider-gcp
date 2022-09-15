@@ -142,6 +142,16 @@ func (s *ClusterScope) FailureDomains() clusterv1.FailureDomains {
 	return s.GCPCluster.Status.FailureDomains
 }
 
+// FailureDomains returns the cluster failure domains.
+func (s *ClusterScope) Zones() []string {
+	fd := s.FailureDomains()
+	zones := make([]string, 0, len(fd))
+	for zone := range fd {
+		zones = append(zones, zone)
+	}
+	return zones
+}
+
 // ANCHOR_END: ClusterGetter
 
 // ANCHOR: ClusterSetter
@@ -309,16 +319,24 @@ func (s *ClusterScope) InstanceGroupSpec(zone string) *compute.InstanceGroup {
 	}
 }
 
-func (s *ClusterScope) ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager {
-	return &compute.InstanceGroupManager{
-		//Name:             s.WorkerGroupName(),
-		Name:             fmt.Sprintf("%s-%s-%s", s.Name(), infrav1.WorkerRoleTagValue, zone),
-		Region:           s.Region(),
-		Zone:             zone,
-		TargetSize:       1,
-		InstanceTemplate: "global/instanceTemplates/instance-template-1",
-	}
-}
+//
+//func (s *ClusterScope) ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager {
+//	return &compute.InstanceGroupManager{
+//		//Name:             s.WorkerGroupName(),
+//		Name:             fmt.Sprintf("%s-%s-%s", s.Name(), infrav1.WorkerRoleTagValue, zone),
+//		Region:           s.Region(),
+//		Zone:             zone,
+//		TargetSize:       1,
+//		InstanceTemplate: s. "global/instanceTemplates/instance-template-1",
+//	}
+//}
+
+//func (s *ClusterScope) InstanceTemplateSpec() *interface{} {
+//	return &compute.InstanceTemplate{
+//		//Name:
+//		//Properties:
+//	}
+//}
 
 // TargetTCPProxySpec returns google compute target-tcp-proxy spec.
 func (s *ClusterScope) TargetTCPProxySpec() *compute.TargetTcpProxy {

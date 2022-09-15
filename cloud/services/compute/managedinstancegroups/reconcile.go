@@ -22,6 +22,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/gcperrors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 )
 
 // Reconcile reconcile cluster managedinstancegroup components.
@@ -87,48 +88,66 @@ func (s *Service) Delete(ctx context.Context) error {
 	return s.deleteManagedInstanceGroups(ctx)
 }
 
-func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) ([]*compute.InstanceGroupManager, error) {
+func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) (*compute.InstanceGroupManager, error) {
 	log := log.FromContext(ctx)
-	fd := s.scope.FailureDomains()
-	zones := make([]string, 0, len(fd))
-	for zone := range fd {
-		zones = append(zones, zone)
-	}
 
-	groups := make([]*compute.InstanceGroupManager, 0, len(zones))
-	groupsMap := s.scope.Network().WorkerInstanceGroups
-	if groupsMap == nil {
-		groupsMap = make(map[string]string)
-	}
+	///// commented out to speed-up testing
+	//fd := s.scope.FailureDomains()
+	//zones := make([]string, 0, len(fd))
+	//for zone := range fd {
+	//	zones = append(zones, zone)
+	//}
+	//
+	//groups := make([]*compute.InstanceGroupManager, 0, len(zones))
+	//groupsMap := s.scope.Network().WorkerInstanceGroups
+	//if groupsMap == nil {
+	//	groupsMap = make(map[string]string)
+	//}
 
-	for _, zone := range zones {
-		instancegroupSpec := s.scope.ManagedInstanceGroupSpec(zone)
-		log.V(2).Info("Looking for managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-		instancegroup, err := s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
-		if err != nil {
-			if !gcperrors.IsNotFound(err) {
-				log.Error(err, "Error looking for managedinstancegroup in zone", "zone", zone)
-				return groups, err
-			}
+	//zones := []string{"us-central1-a"}
+	//
+	//groups := make([]*compute.InstanceGroupManager, 0, len(zones))
+	//groupsMap := s.scope.Network().WorkerInstanceGroups
+	//if groupsMap == nil {
+	//	groupsMap = make(map[string]string)
+	//}
+	//
+	//for _, zone := range zones {
 
-			log.V(2).Info("Creating managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-			if err := s.managedinstancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
-				log.Error(err, "Error creating managedinstancegroup", "name", instancegroupSpec.Name)
-				return groups, err
-			}
-
-			instancegroup, err = s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
-			if err != nil {
-				return groups, err
-			}
+	instancegroupSpec := s.scope.ManagedInstanceGroupSpec()
+	zone := instancegroupSpec.Zone[strings.LastIndex(instancegroupSpec.Zone, "/")+1:]
+	log.V(2).Info("Looking for managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+	instancegroup, err := s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+	if err != nil {
+		if !gcperrors.IsNotFound(err) {
+			log.Error(err, "Error looking for managedinstancegroup in zone", "zone", zone)
+			return instancegroup, err
 		}
 
-		groups = append(groups, instancegroup)
-		groupsMap[zone] = instancegroup.SelfLink
+		log.V(2).Info("Creating managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+		if err := s.managedinstancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
+			log.Error(err, "Error creating managedinstancegroup", "name", instancegroupSpec.Name)
+			return instancegroup, err
+		}
+
+		instancegroup, err = s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+		if err != nil {
+			return instancegroup, err
+		}
 	}
 
-	s.scope.Network().WorkerInstanceGroups = groupsMap
-	return groups, nil
+	return instancegroup, nil
+	//groups = append(groups, instancegroup)
+	//groupsMap[zone] = instancegroup.SelfLink
+	//}
+	//
+	//s.scope.Network().WorkerInstanceGroups = groupsMap
+	//
+	//return groups, nil
+}
+
+func (s *Service) GetManagedInstanceGroups(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error) {
+	return s.managedinstancegroups.Get(ctx, key)
 }
 
 //
@@ -433,19 +452,19 @@ func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) ([]*comp
 
 func (s *Service) deleteManagedInstanceGroups(ctx context.Context) error {
 	log := log.FromContext(ctx)
-	for zone := range s.scope.Network().WorkerInstanceGroups {
-		spec := s.scope.ManagedInstanceGroupSpec(zone)
+	//for zone := range s.scope.Network().WorkerInstanceGroups {
+	spec := s.scope.ManagedInstanceGroupSpec()
 
-		key := meta.ZonalKey(spec.Name, zone)
-		log.V(2).Info("Deleting a managedinstancegroup", "name", spec.Name)
-		if err := s.managedinstancegroups.Delete(ctx, key); err != nil {
-			if !gcperrors.IsNotFound(err) {
-				log.Error(err, "Error deleting a managedinstancegroup", "name", spec.Name)
-				return err
-			}
+	key := meta.ZonalKey(spec.Name, spec.Zone[strings.LastIndex(spec.Zone, "/")+1:])
+	log.V(2).Info("Deleting a managedinstancegroup", "name", spec.Name)
+	if err := s.managedinstancegroups.Delete(ctx, key); err != nil {
+		if !gcperrors.IsNotFound(err) {
+			log.Error(err, "Error deleting a managedinstancegroup", "name", spec.Name)
+			return err
 		}
-		delete(s.scope.Network().WorkerInstanceGroups, zone)
 	}
+	//delete(s.scope.Network().WorkerInstanceGroups, zone)
+	//}
 
 	return nil
 }

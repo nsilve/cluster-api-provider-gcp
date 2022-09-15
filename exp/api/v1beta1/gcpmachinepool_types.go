@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,12 +30,40 @@ type GCPMachinePoolSpec struct {
 
 	// Foo is an example fiGCPMachine instance is runningeld of GCPMachinePool. Edit gcpmachinepool_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
+
+	// +optional
+	InfrastructureRef *corev1.ObjectReference `json:"infrastructureRef,omitempty"`
+
+	// ProviderID is the identification ID of the Managed Instance Group
+	// +optional
+	ProviderID string `json:"providerID,omitempty"`
+
+	// ProviderIDList are the identification IDs of machine instances provided by the provider.
+	// This field must match the provider IDs as seen on the node objects corresponding to a machine pool's machine instances.
+	// +optional
+	ProviderIDList []string `json:"providerIDList,omitempty"`
+
+	// Region is the region of the Managed Instance Group
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Zone is the zone of the Managed Instance Group
+	// +optional
+	Zone string `json:"zone,omitempty"`
 }
 
 // GCPMachinePoolStatus defines the observed state of GCPMachinePool
 type GCPMachinePoolStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Ready is true when the provider resource is ready.
+	// +optional
+	Ready bool `json:"ready"`
+
+	// Replicas is the most recently observed number of replicas
+	// +optional
+	Replicas int32 `json:"replicas"`
 }
 
 // +kubebuilder:object:root=true

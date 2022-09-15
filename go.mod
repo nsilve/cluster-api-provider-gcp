@@ -2,7 +2,8 @@ module sigs.k8s.io/cluster-api-provider-gcp
 
 go 1.18
 
-replace github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0 => github.com/charlie-haley/k8s-cloud-provider v1.18.1-0.20220714094357-11a8da07efe9
+//replace github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0 => github.com/charlie-haley/k8s-cloud-provider v1.18.1-0.20220714094357-11a8da07efe9
+replace github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0 => ../k8s-cloud-provider
 
 require (
 	github.com/GoogleCloudPlatform/k8s-cloud-provider v1.20.0
@@ -13,15 +14,14 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3
-	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
-	google.golang.org/api v0.93.0
+	golang.org/x/net v0.0.0-20220909164309-bea034e7d591
+	google.golang.org/api v0.96.0
 	k8s.io/api v0.24.4
 	k8s.io/apimachinery v0.24.4
 	k8s.io/client-go v0.24.4
 	k8s.io/klog/v2 v2.70.1
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cluster-api v1.2.1
-	sigs.k8s.io/cluster-api-provider-azure v1.4.2
 	sigs.k8s.io/cluster-api/test v1.2.1
 	sigs.k8s.io/controller-runtime v0.12.3
 )
@@ -54,7 +54,6 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
@@ -70,7 +69,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
@@ -107,11 +105,9 @@ require (
 	github.com/subosito/gotenv v1.3.0 // indirect
 	github.com/valyala/fastjson v1.6.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel v1.4.0 // indirect
-	go.opentelemetry.io/otel/trace v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
-	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2 // indirect
-	golang.org/x/sys v0.0.0-20220624220833-87e55d714810 // indirect
+	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094 // indirect
+	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
