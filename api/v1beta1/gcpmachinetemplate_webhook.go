@@ -17,13 +17,18 @@ limitations under the License.
 package v1beta1
 
 import (
+	"fmt"
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-gcpmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates,versions=v1beta1,name=validation.gcpmachinetemplate.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1beta1
+// +kubebuilder:webhook:verbs=create;update;delete,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-gcpmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates,versions=v1beta1,name=validation.gcpmachinetemplate.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1beta1
 // +kubebuilder:webhook:verbs=create;update,path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-gcpmachinetemplate,mutating=true,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates,versions=v1beta1,name=default.gcpmachinetemplate.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1beta1
 
 // log is for logging in this package.
@@ -32,10 +37,13 @@ var _ = logf.Log.WithName("gcpmachinetemplate-resource")
 func (r *GCPMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
+		//WithValidator(r).
+		//WithDefaulter(r).
 		Complete()
 }
 
 var _ webhook.Validator = &GCPMachineTemplate{}
+var _ webhook.Defaulter = &GCPMachineTemplate{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (r *GCPMachineTemplate) ValidateCreate() error {
@@ -45,7 +53,7 @@ func (r *GCPMachineTemplate) ValidateCreate() error {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (r *GCPMachineTemplate) ValidateUpdate(old runtime.Object) error {
+func (r *GCPMachineTemplate) ValidateUpdate(oldObj runtime.Object) error {
 	//newGCPMachineTemplate, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
 	//if err != nil {
 	//	return apierrors.NewInvalid(GroupVersion.WithKind("GCPMachineTemplate").GroupKind(), r.Name, field.ErrorList{
@@ -87,10 +95,25 @@ func (r *GCPMachineTemplate) ValidateUpdate(old runtime.Object) error {
 func (r *GCPMachineTemplate) ValidateDelete() error {
 	clusterlog.Info("validate delete", "name", r.Name)
 
+	if r.Status.References.GCPMachinePools != nil {
+		if len(r.Status.References.GCPMachinePools) > 0 {
+			return apierrors.NewForbidden(schema.GroupResource{
+				Group:    r.GroupVersionKind().Group,
+				Resource: "GCPMachineTemplate",
+			}, r.Name, errors.New(fmt.Sprintf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)))
+			//return apierrors.NewInvalid(r.GroupVersionKind().GroupKind(), r.Name, field.ErrorList{
+			//	field.InternalError(nil, errors.Errorf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)),
+			//})
+			//return errors.Wrapf(errors.New("error deleting"), "could not delete")
+		}
+	}
+	// delete if not used!!
+
 	return nil
 }
 
 // Default implements webhookutil.defaulter so a webhook will be registered for the type.
 func (r *GCPMachineTemplate) Default() {
 	clusterlog.Info("default", "name", r.Name)
+	r.Labels[v1beta1.ClusterLabelName] = r.Spec.ClusterName
 }

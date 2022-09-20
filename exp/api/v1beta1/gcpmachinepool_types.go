@@ -31,8 +31,7 @@ type GCPMachinePoolSpec struct {
 	// Foo is an example fiGCPMachine instance is runningeld of GCPMachinePool. Edit gcpmachinepool_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
 
-	// +optional
-	InfrastructureRef *corev1.ObjectReference `json:"infrastructureRef,omitempty"`
+	MachineTemplate GCPMachinePoolMachineTemplate `json:"machineTemplate"`
 
 	// ProviderID is the identification ID of the Managed Instance Group
 	// +optional
@@ -50,6 +49,10 @@ type GCPMachinePoolSpec struct {
 	// Zone is the zone of the Managed Instance Group
 	// +optional
 	Zone string `json:"zone,omitempty"`
+}
+
+type GCPMachinePoolMachineTemplate struct {
+	InfrastructureRef *corev1.ObjectReference `json:"infrastructureRef"`
 }
 
 // GCPMachinePoolStatus defines the observed state of GCPMachinePool

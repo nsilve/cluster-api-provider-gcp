@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
-	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/instancetemplates"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/compute/managedinstancegroups"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
@@ -60,9 +59,6 @@ type GCPMachinePoolReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinepools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinepools/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machinepools;machinepools/status,verbs=get;list;watch
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=gcpmachinetemplates/finalizers,verbs=update
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
@@ -104,12 +100,12 @@ func (r *GCPMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctr
 		return errors.Wrap(err, "failed adding a watch for ready clusters")
 	}
 
-	if err := c.Watch(
-		&source.Kind{Type: &infrav1.GCPMachineTemplate{}},
-		handler.EnqueueRequestsFromMapFunc(r.GCPMachineTemplateToGCPMachinePools(ctx, log)),
-	); err != nil {
-		return errors.Wrap(err, "failed adding a watch for GCPMachineTemplate")
-	}
+	//if err := c.Watch(
+	//	&source.Kind{Type: &infrav1.GCPMachineTemplate{}},
+	//	handler.EnqueueRequestsFromMapFunc(r.GCPMachineTemplateToGCPMachinePools(ctx, log)),
+	//); err != nil {
+	//	return errors.Wrap(err, "failed adding a watch for GCPMachineTemplate")
+	//}
 
 	return nil
 
@@ -145,7 +141,6 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	defer cancel()
 
 	log := ctrl.LoggerFrom(ctx)
-	log.Info(">>> GCPMachinePoolReconciler <<<")
 	gcpMachinePool := &infrav1exp.GCPMachinePool{}
 	err := r.Get(ctx, req.NamespacedName, gcpMachinePool)
 	if err != nil {
@@ -200,19 +195,20 @@ func (r *GCPMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	if gcpMachinePool.Spec.InfrastructureRef == nil {
-		log.Info(fmt.Sprintf("GCPMachinePool [%s] has empty InfrastructureRef", gcpMachinePool.Name))
-
+	if gcpMachinePool.Spec.MachineTemplate.InfrastructureRef == nil {
+		log.Info(fmt.Sprintf("GCPMachinePool [%s] has empty .spec.machineTemplate.infrastructureRef", gcpMachinePool.Name))
+		return ctrl.Result{}, nil
 	}
 
-	if gcpMachinePool.Spec.InfrastructureRef.Kind != "GCPMachineTemplate" {
-		log.Info(fmt.Sprintf("GCPMachinePool [%s] has an InfrastructureRef of type [%s] and not the expected [GCPMachineTemplate]", gcpMachinePool.Name, gcpMachinePool.Spec.InfrastructureRef.GroupVersionKind()))
+	if gcpMachinePool.Spec.MachineTemplate.InfrastructureRef.Kind != "GCPMachineTemplate" {
+		log.Info(fmt.Sprintf("GCPMachinePool [%s] has a .spec.machineTemplate.infrastructureRef of type [%s] and not the expected [GCPMachineTemplate]", gcpMachinePool.Name, gcpMachinePool.Spec.MachineTemplate.InfrastructureRef.GroupVersionKind()))
+		return ctrl.Result{}, nil
 	}
 
 	gcpMachineTemplateNamespacedName := client.ObjectKey{
 		//Namespace: gcpMachinePool.Spec.InfrastructureRef.Namespace,
 		Namespace: gcpMachinePool.Namespace, // add default value via webhook???
-		Name:      gcpMachinePool.Spec.InfrastructureRef.Name,
+		Name:      gcpMachinePool.Spec.MachineTemplate.InfrastructureRef.Name,
 	}
 
 	gcpMachineTemplate := &infrav1.GCPMachineTemplate{}
@@ -309,11 +305,11 @@ func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machineP
 	//	return reconcile.Result{}, nil
 	//}
 
-	if err := instancetemplates.New(machineTemplateScope).Reconcile(ctx); err != nil {
-		log.Error(err, "Error reconciling instancetemplate resources")
-		record.Warnf(machinePoolScope.GCPMachinePool.Spec.InfrastructureRef, "GCPMachineTemplateReconcile", "Reconcile error - %v", err)
-		return ctrl.Result{}, err
-	}
+	//if err := instancetemplates.New(machineTemplateScope).Reconcile(ctx); err != nil {
+	//	log.Error(err, "Error reconciling instancetemplate resources")
+	//	record.Warnf(machinePoolScope.GCPMachinePool.Spec.InfrastructureRef, "GCPMachineTemplateReconcile", "Reconcile error - %v", err)
+	//	return ctrl.Result{}, err
+	//}
 
 	if err := managedinstancegroups.New(machinePoolScope).Reconcile(ctx); err != nil {
 		log.Error(err, "Error reconciling managedinstancegroup resources")
@@ -383,6 +379,10 @@ func (r *GCPMachinePoolReconciler) reconcileNormal(ctx context.Context, machineP
 	//machinePoolScope.GCPMachinePool.Status.Replicas = int32(mig.TargetSize)
 	machinePoolScope.GCPMachinePool.Status.Replicas = 0
 
+	if !mig.Status.IsStable {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	return reconcile.Result{}, nil
 }
 
@@ -397,11 +397,11 @@ func (r *GCPMachinePoolReconciler) reconcileDelete(ctx context.Context, machineP
 		return ctrl.Result{}, err
 	}
 
-	if err := instancetemplates.New(machineTemplateScope).Delete(ctx); err != nil {
-		log.Error(err, "Error reconciling delete instancetemplate resources")
-		record.Warnf(machineTemplateScope.GCPMachineTemplate, "GCPMachineTemplateReconcile", "Reconcile delete error - %v", err)
-		return ctrl.Result{}, err
-	}
+	//if err := instancetemplates.New(machineTemplateScope).Delete(ctx); err != nil {
+	//	log.Error(err, "Error reconciling delete instancetemplate resources")
+	//	record.Warnf(machineTemplateScope.GCPMachineTemplate, "GCPMachineTemplateReconcile", "Reconcile delete error - %v", err)
+	//	return ctrl.Result{}, err
+	//}
 
 	////clusterScope.SetReady()
 
