@@ -18,7 +18,9 @@ package managedinstancegroups
 
 import (
 	"context"
+	"fmt"
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
+	"github.com/pkg/errors"
 	"google.golang.org/api/compute/v1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/gcperrors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -28,10 +30,15 @@ import (
 // Reconcile reconcile cluster managedinstancegroup components.
 func (s *Service) Reconcile(ctx context.Context) error {
 	log := log.FromContext(ctx)
-	log.Info("Reconciling managedinstancegroup resources")
 
-	//managedinstancegroups, err := s.createOrGetManagedInstanceGroups(ctx)
-	_, err := s.createOrGetManagedInstanceGroups(ctx)
+	log.Info("Reconciling instancetemplate resources")
+	_, err := s.createOrRecreateInstanceTemplates(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Reconciling managedinstancegroup resources")
+	_, err = s.createOrUpdateManagedInstanceGroups(ctx)
 	if err != nil {
 		return err
 	}
@@ -65,32 +72,46 @@ func (s *Service) Reconcile(ctx context.Context) error {
 func (s *Service) Delete(ctx context.Context) error {
 	log := log.FromContext(ctx)
 	log.Info("Deleting managedinstancegroup resources")
-	//if err := s.deleteForwardingRule(ctx); err != nil {
-	//	return err
-	//}
-	//
-	//if err := s.deleteAddress(ctx); err != nil {
-	//	return err
-	//}
-	//
-	//if err := s.deleteTargetTCPProxy(ctx); err != nil {
-	//	return err
-	//}
-	//
-	//if err := s.deleteBackendService(ctx); err != nil {
-	//	return err
-	//}
-	//
-	//if err := s.deleteHealthCheck(ctx); err != nil {
-	//	return err
-	//}
+	if err := s.deleteManagedInstanceGroups(ctx); err != nil {
+		return err
+	}
 
-	return s.deleteManagedInstanceGroups(ctx)
+	log.Info("Deleting instancetemplate resources")
+	return s.deleteInstanceTemplates(ctx)
 }
 
-func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) (*compute.InstanceGroupManager, error) {
-	log := log.FromContext(ctx)
+//
+//func (s *Service) createOrRecreateInstanceTemplates(ctx context.Context) (*compute.InstanceTemplate, error) {
+//	/// name should be gcpmachinepool_name + hash
+//	/// at the end(?) IT housekeeping is needed
+//	log := log.FromContext(ctx)
+//
+//	instancetemplateSpec := s.scope.InstanceTemplateSpec()
+//	log.V(2).Info("Looking for instancetemplate", "name", instancetemplateSpec.Name)
+//	instancetemplate, err := s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
+//	if err != nil {
+//		if !gcperrors.IsNotFound(err) {
+//			log.Error(err, "Error looking for instancetemplate")
+//			return nil, err
+//		}
+//
+//		log.V(2).Info("Creating instancetemplate", "name", instancetemplateSpec.Name)
+//		if err := s.instancetemplates.Insert(ctx, meta.GlobalKey(instancetemplateSpec.Name), instancetemplateSpec); err != nil {
+//			log.Error(err, "Error creating instancetemplate", "name", instancetemplateSpec.Name)
+//			return nil, err
+//		}
+//
+//		instancetemplate, err = s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
+//		if err != nil {
+//			return nil, err
+//		}
+//	}
+//
+//	return instancetemplate, nil
+//}
 
+func (s *Service) createOrUpdateManagedInstanceGroups(ctx context.Context) (*compute.InstanceGroupManager, error) {
+	log := log.FromContext(ctx)
 	///// commented out to speed-up testing
 	//fd := s.scope.FailureDomains()
 	//zones := make([]string, 0, len(fd))
@@ -114,29 +135,82 @@ func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) (*comput
 	//
 	//for _, zone := range zones {
 
-	instancegroupSpec := s.scope.ManagedInstanceGroupSpec()
-	zone := instancegroupSpec.Zone[strings.LastIndex(instancegroupSpec.Zone, "/")+1:]
-	log.V(2).Info("Looking for managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-	instancegroup, err := s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+	//instancegroupSpec := s.scope.ManagedInstanceGroupSpec()
+	//zone := instancegroupSpec.Zone[strings.LastIndex(instancegroupSpec.Zone, "/")+1:]
+	//log.V(2).Info("Looking for managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+	//instancegroup, err := s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+	//if err != nil {
+	//	if !gcperrors.IsNotFound(err) {
+	//		log.Error(err, "Error looking for managedinstancegroup in zone", "zone", zone)
+	//		return instancegroup, err
+	//	}
+	//
+	//	log.V(2).Info("Creating managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
+	//	if err := s.managedinstancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
+	//		log.Error(err, "Error creating managedinstancegroup", "name", instancegroupSpec.Name)
+	//		return instancegroup, err
+	//	}
+	//
+	//	instancegroup, err = s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+	//	if err != nil {
+	//		return instancegroup, err
+	//	}
+	//}
+	//
+	//return instancegroup, nil
+
+	//////////////////////
+
+	//log.V(2).Info("Getting bootstrap data for machinepool")
+	//bootstrapData, err := s.scope.GetBootstrapData()
+	//if err != nil {
+	//	log.Error(err, "Error getting bootstrap data for machinepool")
+	//	return nil, errors.Wrap(err, "failed to retrieve bootstrap data")
+	//}
+
+	regionManagedInstanceGroupSpec := s.scope.RegionManagedInstanceGroupSpec()
+
+	log.V(2).Info("Looking for regionmanagedinstancegroup in region", "region", regionManagedInstanceGroupSpec.Region, "name", regionManagedInstanceGroupSpec.Name)
+	regioninstancegroup, err := s.regionmanagedinstancegroups.Get(ctx, meta.RegionalKey(regionManagedInstanceGroupSpec.Name, regionManagedInstanceGroupSpec.Region))
 	if err != nil {
 		if !gcperrors.IsNotFound(err) {
-			log.Error(err, "Error looking for managedinstancegroup in zone", "zone", zone)
-			return instancegroup, err
+			log.Error(err, "Error looking for regionmanagedinstancegroup in region", "region", regionManagedInstanceGroupSpec.Region)
+			return regioninstancegroup, err
 		}
-
-		log.V(2).Info("Creating managedinstancegroup in zone", "zone", zone, "name", instancegroupSpec.Name)
-		if err := s.managedinstancegroups.Insert(ctx, meta.ZonalKey(instancegroupSpec.Name, zone), instancegroupSpec); err != nil {
-			log.Error(err, "Error creating managedinstancegroup", "name", instancegroupSpec.Name)
-			return instancegroup, err
+		log.V(2).Info("Creating regionmanagedinstancegroup in region", "region", regionManagedInstanceGroupSpec.Region, "name", regionManagedInstanceGroupSpec.Name)
+		if err = s.regionmanagedinstancegroups.Insert(ctx, meta.RegionalKey(regionManagedInstanceGroupSpec.Name, regionManagedInstanceGroupSpec.Region), regionManagedInstanceGroupSpec); err != nil {
+			log.Error(err, "Error creating regionmanagedinstancegroup", "name", regionManagedInstanceGroupSpec.Name)
+			return regioninstancegroup, err
 		}
-
-		instancegroup, err = s.managedinstancegroups.Get(ctx, meta.ZonalKey(instancegroupSpec.Name, zone))
+		regioninstancegroup, err = s.regionmanagedinstancegroups.Get(ctx, meta.RegionalKey(regionManagedInstanceGroupSpec.Name, regionManagedInstanceGroupSpec.Region))
 		if err != nil {
-			return instancegroup, err
+			return regioninstancegroup, err
 		}
 	}
 
-	return instancegroup, nil
+	if s.isRegionManagedInstanceGroupEqual(ctx, regionManagedInstanceGroupSpec, regioninstancegroup) {
+		log.Info("mig equal")
+	} else {
+		log.Info("mig non equal")
+
+		//s.scope.SetInstanceTemplateName(regionManagedInstanceGroupSpec.Versions[0].InstanceTemplate)
+		if err = s.regionmanagedinstancegroups.SetInstanceTemplate(ctx, meta.RegionalKey(
+			regionManagedInstanceGroupSpec.Name,
+			regionManagedInstanceGroupSpec.Region),
+			&compute.RegionInstanceGroupManagersSetTemplateRequest{
+				InstanceTemplate: s.scope.GetFullInstanceTemplateName(),
+			}); err != nil {
+			log.Error(err, "Error setting instance template to regionmanagedinstancegroup", "mig", regionManagedInstanceGroupSpec.Name, "instance template", s.scope.GetInstanceTemplateName())
+			return regioninstancegroup, err
+		}
+	}
+
+	return regioninstancegroup, nil
+	//if err = s.regionmanagedinstancegroups.Insert(ctx, meta.RegionalKey(regioninstancegroupSpec.Name, regioninstancegroupSpec.Region), regioninstancegroupSpec); err != nil {
+	//	log.Error(err, "Error creating regionmanagedinstancegroup", "name", regioninstancegroupSpec.Name)
+	//}
+	//////////////////////
+
 	//groups = append(groups, instancegroup)
 	//groupsMap[zone] = instancegroup.SelfLink
 	//}
@@ -146,8 +220,23 @@ func (s *Service) createOrGetManagedInstanceGroups(ctx context.Context) (*comput
 	//return groups, nil
 }
 
-func (s *Service) GetManagedInstanceGroups(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error) {
-	return s.managedinstancegroups.Get(ctx, key)
+func (s *Service) isRegionManagedInstanceGroupEqual(ctx context.Context, spec *compute.InstanceGroupManager, instanceGroupManager *compute.InstanceGroupManager) bool {
+	//log := log.FromContext(ctx)
+
+	specInstanceTemplate := spec.Versions[0].InstanceTemplate
+	instanceGroupManagerInstanceTemplate := instanceGroupManager.Versions[0].InstanceTemplate[strings.Index(instanceGroupManager.Versions[0].InstanceTemplate, "/global/")+1:]
+
+	//log.Info("IT diff", "specit", specInstanceTemplate, "igmit", instanceGroupManagerInstanceTemplate)
+
+	return specInstanceTemplate == instanceGroupManagerInstanceTemplate
+}
+
+//func (s *Service) GetManagedInstanceGroups(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error) {
+//	return s.managedinstancegroups.Get(ctx, key)
+//}
+
+func (s *Service) GetRegionManagedInstanceGroups(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error) {
+	return s.regionmanagedinstancegroups.Get(ctx, key)
 }
 
 //
@@ -453,18 +542,174 @@ func (s *Service) GetManagedInstanceGroups(ctx context.Context, key *meta.Key) (
 func (s *Service) deleteManagedInstanceGroups(ctx context.Context) error {
 	log := log.FromContext(ctx)
 	//for zone := range s.scope.Network().WorkerInstanceGroups {
-	spec := s.scope.ManagedInstanceGroupSpec()
 
-	key := meta.ZonalKey(spec.Name, spec.Zone[strings.LastIndex(spec.Zone, "/")+1:])
-	log.V(2).Info("Deleting a managedinstancegroup", "name", spec.Name)
-	if err := s.managedinstancegroups.Delete(ctx, key); err != nil {
+	//spec := s.scope.ManagedInstanceGroupSpec()
+	//
+	//key := meta.ZonalKey(spec.Name, spec.Zone[strings.LastIndex(spec.Zone, "/")+1:])
+	//log.V(2).Info("Deleting a managedinstancegroup", "name", spec.Name)
+	//if err := s.managedinstancegroups.Delete(ctx, key); err != nil {
+	//	if !gcperrors.IsNotFound(err) {
+	//		log.Error(err, "Error deleting a managedinstancegroup", "name", spec.Name)
+	//		return err
+	//	}
+	//}
+
+	spec := s.scope.RegionManagedInstanceGroupSpec()
+
+	key := meta.RegionalKey(spec.Name, spec.Region)
+	log.V(2).Info("Deleting a regionmanagedinstancegroup", "name", spec.Name)
+	if err := s.regionmanagedinstancegroups.Delete(ctx, key); err != nil {
 		if !gcperrors.IsNotFound(err) {
-			log.Error(err, "Error deleting a managedinstancegroup", "name", spec.Name)
+			log.Error(err, "Error deleting a regionmanagedinstancegroup", "name", spec.Name)
 			return err
 		}
 	}
+
 	//delete(s.scope.Network().WorkerInstanceGroups, zone)
 	//}
+
+	return nil
+}
+
+func (s *Service) createInstanceTemplate(ctx context.Context, instancetemplateSpec *compute.InstanceTemplate) (*compute.InstanceTemplate, error) {
+	log := log.FromContext(ctx)
+	log.V(2).Info("Creating instancetemplate", "name", instancetemplateSpec.Name)
+	if err := s.instancetemplates.Insert(ctx, meta.GlobalKey(instancetemplateSpec.Name), instancetemplateSpec); err != nil {
+		log.Error(err, "Error creating instancetemplate", "name", instancetemplateSpec.Name)
+		return nil, err
+	}
+
+	instancetemplate, err := s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
+	if err != nil {
+		return nil, err
+	}
+
+	return instancetemplate, nil
+}
+
+func (s *Service) createOrRecreateInstanceTemplates(ctx context.Context) (*compute.InstanceTemplate, error) {
+	/// name should be gcpmachinepool_name + hash
+	/// at the end(?) IT housekeeping is needed
+	log := log.FromContext(ctx)
+
+	log.V(2).Info("Getting bootstrap data for machinepool")
+	bootstrapData, err := s.scope.GetBootstrapData()
+	if err != nil {
+		log.Error(err, "Error getting bootstrap data for machine")
+		return nil, errors.Wrap(err, "failed to retrieve bootstrap data")
+	}
+
+	//if s.scope.GetInstanceTemplateName() == "" {
+	//	s.scope.SetInstanceTemplateName(s.scope.GenerateName(bootstrapData, 0))
+	//}
+
+	var instancetemplate *compute.InstanceTemplate
+	instancetemplateSpec := s.scope.InstanceTemplateSpec()
+
+	//if instancetemplateSpec.Properties.Metadata == nil {
+	//	instancetemplateSpec.Properties.Metadata = new(compute.Metadata)
+	//}
+	//instancetemplateSpec.Properties.Metadata.Items = append(instancetemplateSpec.Properties.Metadata.Items, &compute.MetadataItems{
+	//	Key:   "user-data",
+	//	Value: pointer.StringPtr(bootstrapData),
+	//})
+
+	// delete old
+	oldInstanceTemplate := s.scope.GetOldInstanceTemplateName()
+	if oldInstanceTemplate != "" {
+		key := meta.GlobalKey(oldInstanceTemplate)
+		log.V(2).Info("Deleting an instancetemplate", "name", oldInstanceTemplate)
+		if err := s.instancetemplates.Delete(ctx, key); err != nil {
+			if !gcperrors.IsNotFound(err) {
+				log.Error(err, "Error deleting an instancetemplate", "name", oldInstanceTemplate)
+				return nil, err
+			}
+			log.Info("Error deleting instancetemplate, not found", "name", oldInstanceTemplate)
+		}
+		s.scope.SetOldInstanceTemplateName("")
+	}
+
+	if instancetemplateSpec.Name == "" {
+		instancetemplateSpec.Name = s.scope.GenerateName(bootstrapData, 0)
+	} else {
+		log.V(2).Info("Looking for instancetemplate", "name", instancetemplateSpec.Name)
+		instancetemplate, err = s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
+		if err != nil {
+			if !gcperrors.IsNotFound(err) {
+				log.Error(err, "Error looking for instancetemplate")
+				return nil, err
+			}
+		}
+	}
+
+	if instancetemplate == nil {
+		instancetemplate, err = s.createInstanceTemplate(ctx, instancetemplateSpec)
+		if err != nil {
+			return nil, err
+		}
+
+		s.scope.SetInstanceTemplateName(instancetemplate.Name)
+	}
+
+	if s.isInstanceTemplateEqual(ctx, instancetemplateSpec, instancetemplate) {
+		log.Info("it equal")
+	} else {
+		log.Info("it non equal")
+		var newName string
+		// recreate!!
+		for i := 0; i < 10; i++ {
+			newName = s.scope.GenerateName(bootstrapData, i)
+			if newName != instancetemplateSpec.Name {
+				// conflict
+				break
+			} else {
+				log.Info("it name conflict, retrying")
+			}
+		}
+
+		instancetemplateSpec.Name = newName
+
+		if s.scope.GetOldInstanceTemplateName() != "" {
+			log.Error(errors.New("Instance Template leak"), fmt.Sprintf("%s instance template should be deleted manually", s.scope.GetOldInstanceTemplateName()))
+		}
+
+		// create new
+		instancetemplate, err = s.createInstanceTemplate(ctx, instancetemplateSpec)
+		if err != nil {
+			return nil, err
+		}
+
+		// set new
+		s.scope.SetOldInstanceTemplateName(s.scope.GetFullInstanceTemplateName())
+		s.scope.SetInstanceTemplateName(instancetemplateSpec.Name)
+	}
+
+	return instancetemplate, nil
+}
+
+func (s *Service) isInstanceTemplateEqual(ctx context.Context, spec *compute.InstanceTemplate, instancetemplate *compute.InstanceTemplate) bool {
+	//log := log.FromContext(ctx)
+
+	specBootstrapData := s.scope.GetBootstrapDataFromTemplate(spec)
+	instancetemplateBootstrapData := s.scope.GetBootstrapDataFromTemplate(instancetemplate)
+
+	//log.Info("BD diff", "specbd", specBootstrapData, "itbd", instancetemplateBootstrapData)
+
+	return specBootstrapData == instancetemplateBootstrapData
+}
+
+func (s *Service) deleteInstanceTemplates(ctx context.Context) error {
+	log := log.FromContext(ctx)
+	instancetemplateSpec := s.scope.InstanceTemplateSpec()
+
+	key := meta.GlobalKey(instancetemplateSpec.Name)
+	log.V(2).Info("Deleting an instancetemplate", "name", instancetemplateSpec.Name)
+	if err := s.instancetemplates.Delete(ctx, key); err != nil {
+		if !gcperrors.IsNotFound(err) {
+			log.Error(err, "Error deleting an instancetemplate", "name", instancetemplateSpec.Name)
+			return err
+		}
+	}
 
 	return nil
 }

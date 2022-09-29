@@ -18,6 +18,12 @@ limitations under the License.
 package reconciler
 
 import (
+	"encoding/binary"
+	"fmt"
+	"github.com/davecgh/go-spew/spew"
+	"hash"
+	"hash/fnv"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"time"
 )
 
@@ -35,4 +41,35 @@ func DefaultedLoopTimeout(timeout time.Duration) time.Duration {
 	}
 
 	return timeout
+}
+
+func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+	hasher.Reset()
+	printer := spew.ConfigState{
+		Indent:         " ",
+		SortKeys:       true,
+		DisableMethods: true,
+		SpewKeys:       true,
+	}
+
+	//if _, err := printer.Fprintf(hasher, "%#v", objectToWrite); err != nil {
+	//	return fmt.Errorf("failed to write object to hasher")
+	//}
+	//return nil
+
+	printer.Fprintf(hasher, "%#v", objectToWrite)
+}
+
+func ComputeHash(obj interface{}, collisionCount *int32) string {
+	objHasher := fnv.New32a()
+	DeepHashObject(objHasher, obj)
+
+	// Add collisionCount in the hash if it exists.
+	if collisionCount != nil {
+		collisionCountBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint32(collisionCountBytes, uint32(*collisionCount))
+		objHasher.Write(collisionCountBytes)
+	}
+
+	return rand.SafeEncodeString(fmt.Sprint(objHasher.Sum32()))
 }

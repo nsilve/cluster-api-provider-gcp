@@ -17,8 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -31,7 +31,8 @@ type GCPMachinePoolSpec struct {
 	// Foo is an example fiGCPMachine instance is runningeld of GCPMachinePool. Edit gcpmachinepool_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
 
-	MachineTemplate GCPMachinePoolMachineTemplate `json:"machineTemplate"`
+	//MachineTemplate GCPMachinePoolMachineTemplate `json:"machineTemplate"`
+	MachineTemplate v1beta1.GCPMachineSpec `json:"machineTemplate"`
 
 	// ProviderID is the identification ID of the Managed Instance Group
 	// +optional
@@ -49,11 +50,23 @@ type GCPMachinePoolSpec struct {
 	// Zone is the zone of the Managed Instance Group
 	// +optional
 	Zone string `json:"zone,omitempty"`
+
+	//// MinSize defines the minimum size of the group.
+	//// +kubebuilder:default=1
+	//// +kubebuilder:validation:Minimum=0
+	//MinSize int32 `json:"minSize"`
+	//
+	//// MaxSize defines the maximum size of the group.
+	//// +kubebuilder:default=1
+	//// +kubebuilder:validation:Minimum=1
+	//MaxSize int32 `json:"maxSize"`
+
+	//FailureDomains clusterv1.FailureDomains
 }
 
-type GCPMachinePoolMachineTemplate struct {
-	InfrastructureRef *corev1.ObjectReference `json:"infrastructureRef"`
-}
+//type GCPMachinePoolMachineTemplate struct {
+//	InfrastructureRef *corev1.ObjectReference `json:"infrastructureRef"`
+//}
 
 // GCPMachinePoolStatus defines the observed state of GCPMachinePool
 type GCPMachinePoolStatus struct {
@@ -67,6 +80,22 @@ type GCPMachinePoolStatus struct {
 	// Replicas is the most recently observed number of replicas
 	// +optional
 	Replicas int32 `json:"replicas"`
+
+	// InstanceTemplate is the name of the instance template
+	// +optional
+	InstanceTemplate string `json:"instanceTemplate,omitempty"`
+
+	// OldInstanceTemplate is the name of the old instance template
+	// +optional
+	OldInstanceTemplate string `json:"oldInstanceTemplate,omitempty"`
+
+	//// Conditions defines current service state of the AWSMachinePool.
+	//// +optional
+	//Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	//
+	//// Instances contains the status for each instance in the pool
+	//// +optional
+	//Instances []AWSMachinePoolInstanceStatus `json:"instances,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -77,69 +77,131 @@ spec:
                   of GCPMachinePool. Edit gcpmachinepool_types.go to remove/update
                 type: string
               machineTemplate:
+                description: MachineTemplate GCPMachinePoolMachineTemplate `json:"machineTemplate"`
                 properties:
-                  infrastructureRef:
-                    description: 'ObjectReference contains enough information to let
-                      you inspect or modify the referred object. --- New uses of this
-                      type are discouraged because of difficulty describing its usage
-                      when embedded in APIs. 1. Ignored fields.  It includes many
-                      fields which are not generally honored.  For instance, ResourceVersion
-                      and FieldPath are both very rarely valid in actual usage. 2.
-                      Invalid usage help.  It is impossible to add specific help for
-                      individual usage.  In most embedded usages, there are particular
-                      restrictions like, "must refer only to types A and B" or "UID
-                      not honored" or "name must be restricted". Those cannot be well
-                      described when embedded. 3. Inconsistent validation.  Because
-                      the usages are different, the validation rules are different
-                      by usage, which makes it hard for users to predict what will
-                      happen. 4. The fields are both imprecise and overly precise.  Kind
-                      is not a precise mapping to a URL. This can produce ambiguity
-                      during interpretation and require a REST mapping.  In most cases,
-                      the dependency is on the group,resource tuple and the version
-                      of the actual struct is irrelevant. 5. We cannot easily change
-                      it.  Because this type is embedded in many locations, updates
-                      to this type will affect numerous schemas.  Don''t make new
-                      APIs embed an underspecified API type they do not control. Instead
-                      of using this type, create a locally provided and used type
-                      that is well-focused on your reference. For example, ServiceReferences
-                      for admission registration: https://github.com/kubernetes/api/blob/release-1.17/admissionregistration/v1/types.go#L533
-                      .'
-                    properties:
-                      apiVersion:
-                        description: API version of the referent.
-                        type: string
-                      fieldPath:
-                        description: 'If referring to a piece of an object instead
-                          of an entire object, this string should contain a valid
-                          JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                          For example, if the object reference is to a container within
-                          a pod, this would take on a value like: "spec.containers{name}"
-                          (where "name" refers to the name of the container that triggered
-                          the event) or if no container name is specified "spec.containers[2]"
-                          (container with index 2 in this pod). This syntax is chosen
-                          only to have some well-defined way of referencing a part
-                          of an object. TODO: this design is not final and this field
-                          is subject to change in the future.'
-                        type: string
-                      kind:
-                        description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                        type: string
-                      name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
-                        type: string
-                      namespace:
-                        description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
-                        type: string
-                      resourceVersion:
-                        description: 'Specific resourceVersion to which this reference
-                          is made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                        type: string
-                      uid:
-                        description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
-                        type: string
+                  additionalDisks:
+                    description: AdditionalDisks are optional non-boot attached disks.
+                    items:
+                      description: AttachedDiskSpec degined GCP machine disk.
+                      properties:
+                        deviceType:
+                          description: 'DeviceType is a device type of the attached
+                            disk. Supported types of non-root attached volumes: 1.
+                            "pd-standard" - Standard (HDD) persistent disk 2. "pd-ssd"
+                            - SSD persistent disk 3. "local-ssd" - Local SSD disk
+                            (https://cloud.google.com/compute/docs/disks/local-ssd).
+                            Default is "pd-standard".'
+                          type: string
+                        size:
+                          description: Size is the size of the disk in GBs. Defaults
+                            to 30GB. For "local-ssd" size is always 375GB.
+                          format: int64
+                          type: integer
+                      type: object
+                    type: array
+                  additionalLabels:
+                    additionalProperties:
+                      type: string
+                    description: AdditionalLabels is an optional set of tags to add
+                      to an instance, in addition to the ones added by default by
+                      the GCP provider. If both the GCPCluster and the GCPMachine
+                      specify the same tag name with different values, the GCPMachine's
+                      value takes precedence.
                     type: object
+                  additionalMetadata:
+                    description: AdditionalMetadata is an optional set of metadata
+                      to add to an instance, in addition to the ones added by default
+                      by the GCP provider.
+                    items:
+                      description: MetadataItem defines a single piece of metadata
+                        associated with an instance.
+                      properties:
+                        key:
+                          description: Key is the identifier for the metadata entry.
+                          type: string
+                        value:
+                          description: Value is the value of the metadata entry.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - key
+                    x-kubernetes-list-type: map
+                  additionalNetworkTags:
+                    description: AdditionalNetworkTags is a list of network tags that
+                      should be applied to the instance. These tags are set in addition
+                      to any network tags defined at the cluster level or in the actuator.
+                    items:
+                      type: string
+                    type: array
+                  image:
+                    description: Image is the full reference to a valid image to be
+                      used for this machine. Takes precedence over ImageFamily.
+                    type: string
+                  imageFamily:
+                    description: ImageFamily is the full reference to a valid image
+                      family to be used for this machine.
+                    type: string
+                  instanceType:
+                    description: 'InstanceType is the type of instance to create.
+                      Example: n1.standard-2'
+                    type: string
+                  ipForwarding:
+                    default: Enabled
+                    description: IPForwarding Allows this instance to send and receive
+                      packets with non-matching destination or source IPs. This is
+                      required if you plan to use this instance to forward routes.
+                      Defaults to enabled.
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
+                  preemptible:
+                    description: Preemptible defines if instance is preemptible
+                    type: boolean
+                  providerID:
+                    description: ProviderID is the unique identifier as specified
+                      by the cloud provider.
+                    type: string
+                  publicIP:
+                    description: PublicIP specifies whether the instance should get
+                      a public IP. Set this to true if you don't have a NAT instances
+                      or Cloud Nat setup.
+                    type: boolean
+                  rootDeviceSize:
+                    description: RootDeviceSize is the size of the root volume in
+                      GB. Defaults to 30.
+                    format: int64
+                    type: integer
+                  rootDeviceType:
+                    description: 'RootDeviceType is the type of the root volume. Supported
+                      types of root volumes: 1. "pd-standard" - Standard (HDD) persistent
+                      disk 2. "pd-ssd" - SSD persistent disk Default is "pd-standard".'
+                    type: string
+                  serviceAccounts:
+                    description: 'ServiceAccount specifies the service account email
+                      and which scopes to assign to the machine. Defaults to: email:
+                      "default", scope: []{compute.CloudPlatformScope}'
+                    properties:
+                      email:
+                        description: 'Email: Email address of the service account.'
+                        type: string
+                      scopes:
+                        description: 'Scopes: The list of scopes to be made available
+                          for this service account.'
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  subnet:
+                    description: Subnet is a reference to the subnetwork to use for
+                      this instance. If not specified, the first subnetwork retrieved
+                      from the Cluster Region and Network is picked.
+                    type: string
                 required:
-                - infrastructureRef
+                - instanceType
                 type: object
               providerID:
                 description: ProviderID is the identification ID of the Managed Instance
@@ -165,6 +227,12 @@ spec:
           status:
             description: GCPMachinePoolStatus defines the observed state of GCPMachinePool
             properties:
+              instanceTemplate:
+                description: InstanceTemplate is the name of the instance template
+                type: string
+              oldInstanceTemplate:
+                description: OldInstanceTemplate is the name of the old instance template
+                type: string
               ready:
                 description: Ready is true when the provider resource is ready.
                 type: boolean

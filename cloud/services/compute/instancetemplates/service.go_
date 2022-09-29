@@ -34,8 +34,12 @@ type instancetemplatesInterface interface {
 // Scope is an interfaces that hold used methods.
 type Scope interface {
 	cloud.ClusterGetterSimple
-	cloud.MachineTemplate
+	//cloud.MachineTemplate
 	InstanceTemplateSpec() *compute.InstanceTemplate
+	GetBootstrapData() (string, error)
+	GetBootstrapDataFromTemplate(*compute.InstanceTemplate) string
+	SetInstanceTemplateName(name string)
+	//GetInstanceTemplateBootstrapData(*compute.InstanceTemplate) string
 	//ManagedInstanceGroupSpec(zone string) *compute.InstanceGroupManager
 }
 

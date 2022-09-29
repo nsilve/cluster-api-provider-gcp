@@ -350,8 +350,6 @@ spec:
           spec:
             description: GCPMachineTemplateSpec defines the desired state of GCPMachineTemplate.
             properties:
-              clusterName:
-                type: string
               template:
                 description: GCPMachineTemplateResource describes the data needed
                   to create am GCPMachine from a template.
@@ -513,29 +511,11 @@ spec:
                 - spec
                 type: object
             required:
-            - clusterName
             - template
-            type: object
-          status:
-            description: GCPMachineTemplateStatus defines the observed state of GCPMachineTemplate.
-            properties:
-              ready:
-                type: boolean
-              references:
-                properties:
-                  gcpMachinePools:
-                    additionalProperties:
-                      type: string
-                    type: object
-                type: object
-            required:
-            - ready
             type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
 status:
   acceptedNames:
     kind: ""

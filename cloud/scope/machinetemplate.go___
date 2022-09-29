@@ -1,0 +1,93 @@
+/*
+Copyright 2018 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package scope implements scope types.
+package scope
+
+import (
+	"google.golang.org/api/compute/v1"
+	"k8s.io/utils/pointer"
+)
+
+func (m MachinePoolScope) ReconcileInstanceTemplate() (string, error) {
+
+	return "", nil
+}
+
+func (m *MachinePoolScope) InstanceTemplateSpec() *compute.InstanceTemplate {
+
+	return &compute.InstanceTemplate{
+		Name: m.Name(),
+		Properties: &compute.InstanceProperties{
+			Disks: []*compute.AttachedDisk{
+				&compute.AttachedDisk{
+					//DiskSizeGb: 10,
+					InitializeParams: &compute.AttachedDiskInitializeParams{
+						SourceImage: *m.GCPMachinePool.Spec.MachineTemplate.Image,
+					},
+					AutoDelete: true,
+					Boot:       true,
+				},
+			},
+			MachineType: m.GCPMachinePool.Spec.MachineTemplate.InstanceType,
+			Metadata: &compute.Metadata{
+				Items: []*compute.MetadataItems{
+					&compute.MetadataItems{
+						Key:   "user-data",
+						Value: pointer.String(m.GetBootstrapData()),
+					},
+				},
+			},
+			NetworkInterfaces: []*compute.NetworkInterface{
+				&compute.NetworkInterface{
+					AccessConfigs: []*compute.AccessConfig{
+						&compute.AccessConfig{
+							NetworkTier: "PREMIUM",
+							Type:        "ONE_TO_ONE_NAT",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+//// PatchObject persists the cluster configuration and status.
+//func (m *MachineTemplateScope) PatchObject() error {
+//	return m.patchHelper.Patch(context.TODO(), m.GCPMachineTemplate)
+//}
+//
+//// Close closes the current scope persisting the cluster configuration and status.
+//func (m *MachineTemplateScope) Close() error {
+//	//	ctx, log, done := tele.StartSpanWithLogger(ctx, "scope.MachineTemplateScope.Close")
+//	//	defer done()
+//	//
+//	//	if m.vmssState != nil {
+//	//		if err := m.applyAzureMachineTemplateMachines(ctx); err != nil {
+//	//			log.Error(err, "failed to apply changes to the AzureMachineTemplateMachines")
+//	//			return errors.Wrap(err, "failed to apply changes to AzureMachineTemplateMachines")
+//	//		}
+//	//
+//	//		m.setProvisioningStateAndConditions(m.vmssState.State)
+//	//		if err := m.updateReplicasAndProviderIDs(ctx); err != nil {
+//	//			return errors.Wrap(err, "failed to update replicas and providerIDs")
+//	//		}
+//	//	}
+//	//
+//	//	return m.PatchObject(ctx)
+//
+//	return m.PatchObject()
+//}

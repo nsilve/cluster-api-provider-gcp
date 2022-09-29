@@ -29,6 +29,7 @@ import (
 	infrautil "sigs.k8s.io/cluster-api-provider-gcp/util"
 	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	util2 "sigs.k8s.io/cluster-api/exp/util"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/predicates"
@@ -126,6 +127,10 @@ func (r *GCPMachineTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	if gcpMachineTemplate.Name == "nsilve-workload1-control-plane" {
+		return ctrl.Result{}, err
+	}
+
 	// Fetch the Cluster.
 
 	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, gcpMachineTemplate.ObjectMeta)
@@ -183,17 +188,6 @@ func (r *GCPMachineTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}()
 
-	// Handle deleted machine pools
-	if !gcpMachineTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, machineTemplateScope, clusterScope)
-	}
-
-	// Handle non-deleted machine pools
-	ret, err := r.reconcileNormal(ctx, machineTemplateScope, clusterScope) /// create only if it is needed!!
-	if err != nil {
-		return ret, err
-	}
-
 	//labels := map[string]string{clusterv1.ClusterLabelName: cluster.Name}
 	GCPMachinePoolList := &infrav1exp.GCPMachinePoolList{}
 	// add extra opts for same cluster and infraRef...!!!
@@ -215,10 +209,37 @@ func (r *GCPMachineTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 	for _, mp := range GCPMachinePoolList.Items {
 		// add GCP url from status when added!!!
 		references[mp.Name] = mp.Name
+		machineTemplateScope.GCPMachinePool = &mp
+
+		mpowner, err := util2.GetMachinePoolByName(ctx, r.Client, mp.Namespace, mp.OwnerReferences[0].Name)
+		if err != nil {
+			log.Error(err, "failed to GetMachinePoolByName")
+			return ctrl.Result{}, err
+		}
+
+		machineTemplateScope.MachinePool = mpowner
+
+		if mpowner.Spec.Template.Spec.Bootstrap.DataSecretName == nil {
+			log.Info("Bootstrap data secret reference is not yet available 2")
+			return reconcile.Result{}, nil
+		}
 	}
 	gcpMachineTemplate.Status.References.GCPMachinePools = references
 
-	log.Info("GCPMachinePoolList", "list", GCPMachinePoolList)
+	// Handle deleted machine pools
+	if !gcpMachineTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, machineTemplateScope, clusterScope)
+	}
+
+	if machineTemplateScope.MachinePool == nil {
+		return reconcile.Result{}, nil
+	}
+
+	// Handle non-deleted machine pools
+	ret, err := r.reconcileNormal(ctx, machineTemplateScope, clusterScope) /// create only if it is needed!!
+	if err != nil {
+		return ret, err
+	}
 
 	return ctrl.Result{}, err
 }
@@ -247,6 +268,11 @@ func (r *GCPMachineTemplateReconciler) reconcileNormal(ctx context.Context, mach
 			//Controller:         nil,
 			//BlockOwnerDeletion: nil,
 		})
+
+	machineTemplateScope.GCPMachineTemplate.Status.Ready = false
+	var re infrav1.References
+	//re = make(map[string]string)
+	machineTemplateScope.GCPMachineTemplate.Status.References = re
 
 	// Register the finalizer immediately to avoid orphaning GCP resources on delete
 	if err := machineTemplateScope.PatchObject(); err != nil {

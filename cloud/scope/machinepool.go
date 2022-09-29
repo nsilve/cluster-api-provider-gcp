@@ -22,22 +22,29 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"google.golang.org/api/compute/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
+	"path"
 	infrav1 "sigs.k8s.io/cluster-api-provider-gcp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
+	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 // MachinePoolScopeParams defines the input parameters used to create a new MachinePoolScope.
 type MachinePoolScopeParams struct {
-	Client             client.Client
-	ClusterGetter      cloud.ClusterGetter
-	MachinePool        *clusterv1exp.MachinePool
-	GCPMachinePool     *infrav1exp.GCPMachinePool
-	GCPMachineTemplate *infrav1.GCPMachineTemplate
+	Client         client.Client
+	ClusterGetter  cloud.ClusterGetter
+	MachinePool    *clusterv1exp.MachinePool
+	GCPMachinePool *infrav1exp.GCPMachinePool
+	//BootstrapData  string
+	//GCPMachineTemplate *infrav1.GCPMachineTemplate
 }
 
 // NewMachinePoolScope creates a new MachinePoolScope from the supplied parameters.
@@ -52,33 +59,132 @@ func NewMachinePoolScope(params MachinePoolScopeParams) (*MachinePoolScope, erro
 	if params.GCPMachinePool == nil {
 		return nil, errors.New("gcp machinepool is required when creating a MachinePoolScope")
 	}
-	if params.GCPMachineTemplate == nil {
-		return nil, errors.New("gcp machinetemplate is required when creating a MachinePoolScope")
-	}
+	//if params.GCPMachineTemplate == nil {
+	//	return nil, errors.New("gcp machinetemplate is required when creating a MachinePoolScope")
+	//}
 
 	helper, err := patch.NewHelper(params.GCPMachinePool, params.Client)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to init patch helper")
 	}
 
-	return &MachinePoolScope{
-		client:             params.Client,
-		MachinePool:        params.MachinePool,
-		GCPMachinePool:     params.GCPMachinePool,
-		ClusterGetter:      params.ClusterGetter,
-		patchHelper:        helper,
-		GCPMachineTemplate: params.GCPMachineTemplate,
-	}, nil
+	mps := &MachinePoolScope{
+		client:         params.Client,
+		MachinePool:    params.MachinePool,
+		GCPMachinePool: params.GCPMachinePool,
+		ClusterGetter:  params.ClusterGetter,
+		patchHelper:    helper,
+		//bootstrapData:  params.BootstrapData,
+		//GCPMachineTemplate: params.GCPMachineTemplate,
+	}
+
+	//if err := mps.fillBootstrapData(); err != nil {
+	//	return nil, err
+	//}
+
+	return mps, nil
 }
 
 // MachinePoolScope defines a scope defined around a machinepool and its cluster.
 type MachinePoolScope struct {
-	client             client.Client
-	patchHelper        *patch.Helper
-	ClusterGetter      cloud.ClusterGetter
-	MachinePool        *clusterv1exp.MachinePool
-	GCPMachinePool     *infrav1exp.GCPMachinePool
-	GCPMachineTemplate *infrav1.GCPMachineTemplate
+	client         client.Client
+	patchHelper    *patch.Helper
+	ClusterGetter  cloud.ClusterGetter
+	MachinePool    *clusterv1exp.MachinePool
+	GCPMachinePool *infrav1exp.GCPMachinePool
+	//bootstrapData  string
+	//GCPMachineTemplate *infrav1.GCPMachineTemplate
+}
+
+func (m *MachinePoolScope) GetInstanceTemplateName() string {
+	return m.formatInstanceTemplateName(m.GCPMachinePool.Status.InstanceTemplate)
+}
+
+func (m *MachinePoolScope) GetOldInstanceTemplateName() string {
+	return m.formatInstanceTemplateName(m.GCPMachinePool.Status.OldInstanceTemplate)
+}
+
+func (m *MachinePoolScope) SetOldInstanceTemplateName(instanceTemplateName string) {
+	m.GCPMachinePool.Status.OldInstanceTemplate = m.formatFullInstanceTemplateName(instanceTemplateName)
+	m.PatchObject()
+}
+
+func (m *MachinePoolScope) GetFullInstanceTemplateName() string {
+	return m.formatFullInstanceTemplateName(m.GCPMachinePool.Status.InstanceTemplate)
+}
+
+func (m *MachinePoolScope) SetInstanceTemplateName(instanceTemplateName string) {
+	m.GCPMachinePool.Status.InstanceTemplate = m.formatFullInstanceTemplateName(instanceTemplateName)
+	m.PatchObject()
+}
+
+func (m *MachinePoolScope) formatFullInstanceTemplateName(instanceTemplateName string) string {
+	if instanceTemplateName == "" {
+		return ""
+	} else if strings.Contains(instanceTemplateName, "/") {
+		return instanceTemplateName
+	} else {
+		return fmt.Sprintf("global/instanceTemplates/%s", instanceTemplateName)
+	}
+}
+func (m *MachinePoolScope) formatInstanceTemplateName(instanceTemplateName string) string {
+	if instanceTemplateName == "" {
+		return ""
+	} else if strings.Contains(instanceTemplateName, "/") {
+		return instanceTemplateName[strings.LastIndex(instanceTemplateName, "/")+1:]
+	} else {
+		return instanceTemplateName
+	}
+}
+
+func (m *MachinePoolScope) GetBootstrapDataFromTemplate(instanceTemplate *compute.InstanceTemplate) string {
+	for _, item := range instanceTemplate.Properties.Metadata.Items {
+		if item.Key == "user-data" {
+			return *item.Value
+		}
+	}
+
+	return ""
+}
+
+//func (m *MachinePoolScope) fillBootstrapData() error {
+//	if m.MachinePool.Spec.Template.Spec.Bootstrap.DataSecretName == nil {
+//		return errors.New("error retrieving bootstrap data: linked Machine's bootstrap.dataSecretName is nil")
+//	}
+//
+//	secret := &corev1.Secret{}
+//	key := types.NamespacedName{Namespace: m.Namespace(), Name: *m.MachinePool.Spec.Template.Spec.Bootstrap.DataSecretName}
+//	if err := m.client.Get(context.TODO(), key, secret); err != nil {
+//		return errors.Wrapf(err, "failed to retrieve bootstrap data secret for GCPMachinePool %s/%s", m.Namespace(), m.Name())
+//	}
+//
+//	value, ok := secret.Data["value"]
+//	if !ok {
+//		return errors.New("error retrieving bootstrap data: secret value key is missing")
+//	}
+//
+//	m.bootstrapData = string(value)
+//	return nil
+//}
+
+func (m *MachinePoolScope) GetBootstrapData() (string, error) {
+	//return m.bootstrapData
+	if m.MachinePool.Spec.Template.Spec.Bootstrap.DataSecretName == nil {
+		return "", errors.New("error retrieving bootstrap data: linked Machine's bootstrap.dataSecretName is nil")
+	}
+
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Namespace: m.Namespace(), Name: *m.MachinePool.Spec.Template.Spec.Bootstrap.DataSecretName}
+	if err := m.client.Get(context.TODO(), key, secret); err != nil {
+		return "", errors.Wrapf(err, "failed to retrieve bootstrap data secret for GCPMachinePool %s/%s", m.Namespace(), m.Name())
+	}
+
+	value, ok := secret.Data["value"]
+	if !ok {
+		return "", errors.New("error retrieving bootstrap data: secret value key is missing")
+	}
+
+	return string(value), nil
 }
 
 func (m *MachinePoolScope) Zones() []string {
@@ -125,29 +231,126 @@ func (m *MachinePoolScope) Namespace() string {
 	return m.GCPMachinePool.Namespace
 }
 
-func (m *MachinePoolScope) ManagedInstanceGroupSpec() *compute.InstanceGroupManager {
-	//zones := m.ClusterGetter.Zones()
-	//
-	//dps := make([]*compute.DistributionPolicyZoneConfiguration, 0, len(zones))
-	//for _, zone := range zones {
-	//	dps = append(dps, &compute.DistributionPolicyZoneConfiguration{
-	//		Zone: fmt.Sprintf("zones/%s", zone),
-	//	})
-	//}
+func (m *MachinePoolScope) GenerateName(bootstrapData string, collisions int) string {
+	// check kubernetes/pkg/controller/deployment/sync.go: 250
+	return fmt.Sprintf("%s-%s", m.GCPMachinePool.Name, reconciler.ComputeHash(bootstrapData, pointer.Int32(int32(collisions))))
+	//return machineTemplateSpecHasher.Sum32(), nil
+	//return m.GCPMachinePool.Status.InstanceTemplate +
+}
+
+//func (m *MachinePoolScope) ManagedInstanceGroupSpec() *compute.InstanceGroupManager {
+//	zones := m.ClusterGetter.Zones()
+//	//
+//	dps := make([]*compute.DistributionPolicyZoneConfiguration, 0, len(zones))
+//	for _, zone := range zones {
+//		dps = append(dps, &compute.DistributionPolicyZoneConfiguration{
+//			Zone: fmt.Sprintf("zones/%s", zone),
+//		})
+//	}
+//
+//	return &compute.InstanceGroupManager{
+//		//Name:             s.WorkerGroupName(),
+//		//Name:   fmt.Sprintf("%s-%s-%s", m.GCPMachinePool.Name, infrav1.WorkerRoleTagValue, m.GCPMachinePool.Spec.Zone),
+//		Name:   m.GCPMachinePool.Name,
+//		Region: m.GCPMachinePool.Spec.Region,
+//		DistributionPolicy: &compute.DistributionPolicy{
+//			Zones:       dps,
+//			TargetShape: "EVEN",
+//		},
+//		//Zone: fmt.Sprintf("zones/%s", m.GCPMachinePool.Spec.Zone),
+//		//Zone:             zone,
+//		TargetSize:       1,
+//		InstanceTemplate: fmt.Sprintf("global/instanceTemplates/%s", m.GCPMachineTemplate.Name), // *m.GCPMachineTemplate.Spec.Template.Spec.Image, // global/instanceTemplates/instance-template-1
+//	}
+//
+//}
+
+func (m *MachinePoolScope) RegionManagedInstanceGroupSpec() *compute.InstanceGroupManager {
+	zones := m.MachinePool.Spec.FailureDomains
+	if len(zones) == 0 {
+		zones = m.ClusterGetter.Zones()
+	}
+
+	dps := make([]*compute.DistributionPolicyZoneConfiguration, 0, len(zones))
+	for _, zone := range zones {
+		dps = append(dps, &compute.DistributionPolicyZoneConfiguration{
+			Zone: fmt.Sprintf("zones/%s", zone),
+		})
+	}
 
 	return &compute.InstanceGroupManager{
-		//Name:             s.WorkerGroupName(),
-		//Name:   fmt.Sprintf("%s-%s-%s", m.GCPMachinePool.Name, infrav1.WorkerRoleTagValue, m.GCPMachinePool.Spec.Zone),
 		Name:   m.GCPMachinePool.Name,
 		Region: m.GCPMachinePool.Spec.Region,
-		//DistributionPolicy: &compute.DistributionPolicy{
-		//	Zones:       dps,
-		//	TargetShape: "EVEN",
-		//},
-		Zone: fmt.Sprintf("zones/%s", m.GCPMachinePool.Spec.Zone),
-		//Zone:             zone,
-		TargetSize:       1,
-		InstanceTemplate: fmt.Sprintf("global/instanceTemplates/%s", m.GCPMachineTemplate.Name), // *m.GCPMachineTemplate.Spec.Template.Spec.Image, // global/instanceTemplates/instance-template-1
+		DistributionPolicy: &compute.DistributionPolicy{
+			Zones:       dps,
+			TargetShape: "EVEN",
+		},
+		TargetSize: 1,
+		Versions: []*compute.InstanceGroupManagerVersion{
+			&compute.InstanceGroupManagerVersion{
+				InstanceTemplate: m.GetFullInstanceTemplateName(), // it needs the hashed name!!!!! TODO
+			},
+		},
+
+		/////
+		//InstanceTemplate: fmt.Sprintf("global/instanceTemplates/%s", m.GCPMachineTemplate.Name), // *m.GCPMachineTemplate.Spec.Template.Spec.Image, // global/instanceTemplates/instance-template-1
+
+	}
+
+}
+
+func (m *MachinePoolScope) InstanceTemplateSpec() *compute.InstanceTemplate {
+	// add tags and labels and ... (check InstanceSpec())
+	instanceTemplate := &compute.InstanceTemplate{
+		Name: m.GetInstanceTemplateName(),
+		Properties: &compute.InstanceProperties{
+			Disks: []*compute.AttachedDisk{
+				&compute.AttachedDisk{
+					//DiskSizeGb: 10,
+					InitializeParams: &compute.AttachedDiskInitializeParams{
+						SourceImage: *m.GCPMachinePool.Spec.MachineTemplate.Image,
+					},
+					AutoDelete: true,
+					Boot:       true,
+				},
+			},
+			MachineType: m.GCPMachinePool.Spec.MachineTemplate.InstanceType,
+			NetworkInterfaces: []*compute.NetworkInterface{
+				&compute.NetworkInterface{
+					Network: path.Join("projects", m.ClusterGetter.Project(), "global", "networks", m.ClusterGetter.NetworkName()),
+					//AccessConfigs: []*compute.AccessConfig{
+					//	&compute.AccessConfig{
+					//		NetworkTier: "PREMIUM",
+					//		Type:        "ONE_TO_ONE_NAT",
+					//	},
+					//},
+				},
+			},
+			ServiceAccounts: []*compute.ServiceAccount{
+				&compute.ServiceAccount{
+					Email: "default",
+					Scopes: []string{
+						compute.CloudPlatformScope,
+					},
+				},
+			},
+		},
+	}
+
+	if instanceTemplate.Properties.Metadata == nil {
+		instanceTemplate.Properties.Metadata = new(compute.Metadata)
+	}
+	instanceTemplate.Properties.Metadata.Items = append(instanceTemplate.Properties.Metadata.Items, m.InstanceTemplatePropertiesMetadataSpec())
+
+	return instanceTemplate
+}
+
+func (m *MachinePoolScope) InstanceTemplatePropertiesMetadataSpec() *compute.MetadataItems {
+	bootstrapData, _ := m.GetBootstrapData()
+
+	return &compute.MetadataItems{
+		Key:   "user-data",
+		Value: &bootstrapData,
 	}
 }
 

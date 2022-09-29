@@ -23,6 +23,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	"time"
 
 	// +kubebuilder:scaffold:imports
@@ -65,6 +66,7 @@ func init() {
 	_ = clusterv1.AddToScheme(scheme)
 	_ = infrav1beta1exp.AddToScheme(scheme)
 	_ = clusterv1exp.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
 
 	//utilruntime.Must(infrav1beta1exp.AddToScheme(scheme))
 	//_ = infrastructurev1beta1.AddToScheme(scheme)
@@ -176,14 +178,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GCPMachinePool")
 		os.Exit(1)
 	}
-	if err = (&controllers.GCPMachineTemplateReconciler{
-		Client:           mgr.GetClient(),
-		ReconcileTimeout: reconcileTimeout,
-		WatchFilterValue: watchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: gcpMachineTemplateConcurrency}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GCPMachineTemplate")
-		os.Exit(1)
-	}
+	//if err = (&controllers.GCPMachineTemplateReconciler{
+	//	Client:           mgr.GetClient(),
+	//	ReconcileTimeout: reconcileTimeout,
+	//	WatchFilterValue: watchFilterValue,
+	//}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: gcpMachineTemplateConcurrency}); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "GCPMachineTemplate")
+	//	os.Exit(1)
+	//}
 
 	if err = (&infrav1beta1.GCPCluster{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "GCPCluster")
@@ -197,10 +199,10 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "GCPMachine")
 		os.Exit(1)
 	}
-	if err = (&infrav1beta1.GCPMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "GCPMachineTemplate")
-		os.Exit(1)
-	}
+	//if err = (&infrav1beta1.GCPMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
+	//	setupLog.Error(err, "unable to create webhook", "webhook", "GCPMachineTemplate")
+	//	os.Exit(1)
+	//}
 
 	if err = (&infrav1beta1exp.GCPMachinePool{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "GCPMachinePool")

@@ -19,7 +19,9 @@ package instancetemplates
 import (
 	"context"
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
+	"github.com/pkg/errors"
 	"google.golang.org/api/compute/v1"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud/gcperrors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -29,8 +31,8 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	log := log.FromContext(ctx)
 	log.Info("Reconciling instancetemplate resources")
 
-	//instancetemplates, err := s.createOrGetInstanceTemplates(ctx)
-	_, err := s.createOrGetInstanceTemplates(ctx)
+	//instancetemplates, err := s.createOrRecreateInstanceTemplates(ctx)
+	_, err := s.createOrRecreateInstanceTemplates(ctx)
 	if err != nil {
 		return err
 	}
@@ -46,9 +48,29 @@ func (s *Service) Delete(ctx context.Context) error {
 	return s.deleteInstanceTemplates(ctx)
 }
 
-func (s *Service) createOrGetInstanceTemplates(ctx context.Context) (*compute.InstanceTemplate, error) {
+func (s *Service) createOrRecreateInstanceTemplates(ctx context.Context) (*compute.InstanceTemplate, error) {
+	/// name should be gcpmachinepool_name + hash
+	/// at the end(?) IT housekeeping is needed
 	log := log.FromContext(ctx)
+	var instancetemplateNew *compute.InstanceTemplate
+
+	log.V(2).Info("Getting bootstrap data for machinepool")
+	bootstrapData, err := s.scope.GetBootstrapData()
+	if err != nil {
+		log.Error(err, "Error getting bootstrap data for machine")
+		return nil, errors.Wrap(err, "failed to retrieve bootstrap data")
+	}
+
 	instancetemplateSpec := s.scope.InstanceTemplateSpec()
+
+	if instancetemplateSpec.Properties.Metadata == nil {
+		instancetemplateSpec.Properties.Metadata = new(compute.Metadata)
+	}
+	instancetemplateSpec.Properties.Metadata.Items = append(instancetemplateSpec.Properties.Metadata.Items, &compute.MetadataItems{
+		Key:   "user-data",
+		Value: pointer.StringPtr(bootstrapData),
+	})
+
 	log.V(2).Info("Looking for instancetemplate", "name", instancetemplateSpec.Name)
 	instancetemplate, err := s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
 	if err != nil {
@@ -68,7 +90,51 @@ func (s *Service) createOrGetInstanceTemplates(ctx context.Context) (*compute.In
 			return nil, err
 		}
 	}
-	return instancetemplate, nil
+
+	if s.isEqual(ctx, instancetemplateSpec, instancetemplate) {
+		log.Info("equal")
+	} else {
+		log.Info("non equal")
+		// recreate!!
+
+		// create new
+		log.V(2).Info("Creating instancetemplate", "name", instancetemplateSpec.Name)
+		if err := s.instancetemplates.Insert(ctx, meta.GlobalKey(instancetemplateSpec.Name), instancetemplateSpec); err != nil {
+			log.Error(err, "Error creating instancetemplate", "name", instancetemplateSpec.Name)
+			return nil, err
+		}
+
+		instancetemplateNew, err = s.instancetemplates.Get(ctx, meta.GlobalKey(instancetemplateSpec.Name))
+		if err != nil {
+			return nil, err
+		}
+
+		// set new
+		s.scope.SetInstanceTemplateName(instancetemplateNew.Name)
+
+		// delete old
+		key := meta.GlobalKey(instancetemplate.Name)
+		log.V(2).Info("Deleting an instancetemplate", "name", instancetemplate.Name)
+		if err := s.instancetemplates.Delete(ctx, key); err != nil {
+			if !gcperrors.IsNotFound(err) {
+				log.Error(err, "Error deleting an instancetemplate", "name", instancetemplate.Name)
+				return instancetemplateNew, err
+			}
+		}
+	}
+
+	return instancetemplateNew, nil
+}
+
+func (s *Service) isEqual(ctx context.Context, spec *compute.InstanceTemplate, instancetemplate *compute.InstanceTemplate) bool {
+	log := log.FromContext(ctx)
+
+	specBootstrapData := s.scope.GetBootstrapDataFromTemplate(spec)
+	instancetemplateBootstrapData := s.scope.GetBootstrapDataFromTemplate(instancetemplate)
+
+	log.Info("IT diff", "specbd", specBootstrapData, "itbd", instancetemplateBootstrapData)
+
+	return specBootstrapData == instancetemplateBootstrapData
 }
 
 func (s *Service) deleteInstanceTemplates(ctx context.Context) error {

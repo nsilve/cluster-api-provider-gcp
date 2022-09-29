@@ -22,34 +22,63 @@ import (
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
 	"google.golang.org/api/compute/v1"
 	"sigs.k8s.io/cluster-api-provider-gcp/cloud"
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
 )
 
-type managedinstancegroupsInterface interface {
+type instancetemplatesInterface interface {
+	Get(ctx context.Context, key *meta.Key) (*compute.InstanceTemplate, error)
+	List(ctx context.Context, fl *filter.F) ([]*compute.InstanceTemplate, error)
+	Insert(ctx context.Context, key *meta.Key, obj *compute.InstanceTemplate) error
+	Delete(ctx context.Context, key *meta.Key) error
+}
+
+//	type managedinstancegroupsInterface interface {
+//		Get(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error)
+//		List(ctx context.Context, zone string, fl *filter.F) ([]*compute.InstanceGroupManager, error)
+//		Insert(ctx context.Context, key *meta.Key, obj *compute.InstanceGroupManager) error
+//		Delete(ctx context.Context, key *meta.Key) error
+//	}
+type regionmanagedinstancegroupsInterface interface {
 	Get(ctx context.Context, key *meta.Key) (*compute.InstanceGroupManager, error)
-	List(ctx context.Context, zone string, fl *filter.F) ([]*compute.InstanceGroupManager, error)
 	Insert(ctx context.Context, key *meta.Key, obj *compute.InstanceGroupManager) error
 	Delete(ctx context.Context, key *meta.Key) error
+	SetInstanceTemplate(context.Context, *meta.Key, *compute.RegionInstanceGroupManagersSetTemplateRequest) error
 }
 
 // Scope is an interfaces that hold used methods.
 type Scope interface {
 	cloud.ClusterGetter
-	//cloud.MachineTemplate
-	ManagedInstanceGroupSpec() *compute.InstanceGroupManager
+	cloud.MachineTemplate
+	//ManagedInstanceGroupSpec() *compute.InstanceGroupManager
+	//InstanceTemplateSpec() *compute.InstanceTemplate
+	RegionManagedInstanceGroupSpec() *compute.InstanceGroupManager
+	GetBootstrapData() (string, error)
+	GetBootstrapDataFromTemplate(*compute.InstanceTemplate) string
+	SetInstanceTemplateName(name string)
+	GetInstanceTemplateName() string
+	GetOldInstanceTemplateName() string
+	SetOldInstanceTemplateName(name string)
+	GetFullInstanceTemplateName() string
+	InstanceTemplateSpec() *compute.InstanceTemplate
+	GenerateName(bootstrapData string, collisions int) string
 }
 
 // Service implements instancegroups reconciler.
 type Service struct {
-	scope                 Scope
-	managedinstancegroups managedinstancegroupsInterface
+	scope Scope
+	//managedinstancegroups managedinstancegroupsInterface
+	instancetemplates           instancetemplatesInterface
+	regionmanagedinstancegroups regionmanagedinstancegroupsInterface
 }
 
 var _ cloud.Reconciler = &Service{}
 
 // New returns Service from given scope.
-func New(scope Scope) *Service {
+func New(scope *scope.MachinePoolScope) *Service {
 	return &Service{
-		scope:                 scope,
-		managedinstancegroups: scope.Cloud().InstanceGroupManagers(),
+		scope: scope,
+		//managedinstancegroups: scope.Cloud().InstanceGroupManagers(),
+		instancetemplates:           scope.Cloud().InstanceTemplates(),
+		regionmanagedinstancegroups: scope.Cloud().RegionInstanceGroupManagers(),
 	}
 }

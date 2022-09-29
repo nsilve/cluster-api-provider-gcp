@@ -111,6 +111,8 @@ type MachineTemplateGetter interface {
 	Client
 	Name() string
 	Namespace() string
+	//GenerateName() string
+	//SetInstanceTemplateName(name string)
 	//Project() string
 	//Role() string
 	//IsControlPlane() bool
@@ -124,6 +126,7 @@ type MachineTemplateGetter interface {
 
 // MachineTemplateSetter is an interface which can set machinetemplate informations.
 type MachineTemplateSetter interface {
+	//SetInstanceTemplateName(name string)
 	//SetProviderID()
 	//SetInstanceStatus(v infrav1.InstanceStatus)
 	//SetFailureMessage(v error)

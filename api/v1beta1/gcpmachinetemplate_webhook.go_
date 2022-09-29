@@ -17,11 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
-	"fmt"
-	"github.com/pkg/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -95,18 +91,18 @@ func (r *GCPMachineTemplate) ValidateUpdate(oldObj runtime.Object) error {
 func (r *GCPMachineTemplate) ValidateDelete() error {
 	clusterlog.Info("validate delete", "name", r.Name)
 
-	if r.Status.References.GCPMachinePools != nil {
-		if len(r.Status.References.GCPMachinePools) > 0 {
-			return apierrors.NewForbidden(schema.GroupResource{
-				Group:    r.GroupVersionKind().Group,
-				Resource: "GCPMachineTemplate",
-			}, r.Name, errors.New(fmt.Sprintf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)))
-			//return apierrors.NewInvalid(r.GroupVersionKind().GroupKind(), r.Name, field.ErrorList{
-			//	field.InternalError(nil, errors.Errorf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)),
-			//})
-			//return errors.Wrapf(errors.New("error deleting"), "could not delete")
-		}
-	}
+	//if r.Status.References.GCPMachinePools != nil {
+	//	if len(r.Status.References.GCPMachinePools) > 0 {
+	//		return apierrors.NewForbidden(schema.GroupResource{
+	//			Group:    r.GroupVersionKind().Group,
+	//			Resource: "GCPMachineTemplate",
+	//		}, r.Name, errors.New(fmt.Sprintf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)))
+	//		//return apierrors.NewInvalid(r.GroupVersionKind().GroupKind(), r.Name, field.ErrorList{
+	//		//	field.InternalError(nil, errors.Errorf("Cannot delete %s:%s because it is used by GCPMachinePools", r.Namespace, r.Name)),
+	//		//})
+	//		//return errors.Wrapf(errors.New("error deleting"), "could not delete")
+	//	}
+	//}
 	// delete if not used!!
 
 	return nil
